@@ -38,13 +38,18 @@ Young professionals (20–35) who want better control over their money but don't
 - [x] Monthly spending bar chart (6 months)
 - [x] Category breakdown donut chart
 - [x] Cashflow prediction with warning states
-- [x] Smart insights (5 rule-based insights)
+- [x] Smart insights (5 rule-based insights) - UPGRADED
 - [x] CSV upload with drag-drop
 - [x] Demo data auto-seeding (90 days of transactions)
 - [x] Mobile-responsive navigation
 - [x] Premium Apple-minimal design
 
-## Smart Insights Logic
+### Advanced Insights System (v2) ✅
+- [x] **7 Insight Types**: Spending Trend, Category Dominance, Subscription Detection, Cashflow Warning, Weekend Spending, Micro-Spending, Savings Projection
+- [x] **Spending Personality**: Classifies users as Comfort Spender, Impulse Buyer, Disciplined Saver, or Lifestyle Spender with personalized traits and recommendations
+- [x] **Financial Health Score**: 0-100 score with grade (A+ to D), 4 factor breakdown (Spending Stability, Category Balance, Savings Rate, Cashflow Health), and improvement tips
+
+## Smart Insights Logic (v2)
 1. **Month over Month**: Compares current vs last month spending
 2. **Subscription Count**: Identifies recurring subscriptions
 3. **Top Category**: Shows biggest expense category
