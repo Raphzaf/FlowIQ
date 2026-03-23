@@ -188,8 +188,8 @@ const SpendingChart = ({ data, loading }) => {
         </CardTitle>
       </CardHeader>
       <CardContent className="p-6 pt-2">
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="h-64 w-full">
+          <ResponsiveContainer width="100%" height={256}>
             <BarChart data={chartData} barCategoryGap="20%">
               <XAxis 
                 dataKey="month" 
@@ -254,8 +254,8 @@ const CategoryChart = ({ data, loading }) => {
         </CardTitle>
       </CardHeader>
       <CardContent className="p-6 pt-2">
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="h-64 w-full">
+          <ResponsiveContainer width="100%" height={256}>
             <PieChart>
               <Pie
                 data={chartData}
