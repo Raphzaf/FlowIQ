@@ -18,6 +18,7 @@ import Dashboard from "./pages/Dashboard";
 import Insights from "./pages/Insights";
 import UploadPage from "./pages/Upload";
 import Transactions from "./pages/Transactions";
+import WidgetPage from "./pages/WidgetPage";
 import { QuickEntryFAB, QuickEntryDrawer } from "./pages/QuickEntry";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -217,6 +218,7 @@ function App() {
               <Route path="/insights" element={<Insights />} />
               <Route path="/transactions" element={<Transactions />} />
               <Route path="/upload" element={<UploadPage />} />
+              <Route path="/widget" element={<WidgetPage />} />
             </Routes>
           </main>
           

@@ -11,7 +11,10 @@ import {
   Sparkles,
   ArrowUpRight,
   ArrowDownRight,
-  Calendar
+  Calendar,
+  Smartphone,
+  X,
+  Download
 } from "lucide-react";
 import { 
   BarChart, 
@@ -27,6 +30,103 @@ import {
   Area
 } from "recharts";
 import { Link } from "react-router-dom";
+
+// Install App Banner Component
+const InstallAppBanner = () => {
+  const [show, setShow] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+
+  useEffect(() => {
+    // Check if already installed or dismissed
+    const dismissed = localStorage.getItem('installBannerDismissed');
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+    
+    if (dismissed || isStandalone) return;
+
+    // Listen for install prompt
+    const handleBeforeInstall = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShow(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    
+    // Show banner on mobile after a delay
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile && !dismissed) {
+      setTimeout(() => setShow(true), 3000);
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+    };
+  }, []);
+
+  const handleInstall = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setShow(false);
+      }
+      setDeferredPrompt(null);
+    } else {
+      // For iOS, show instructions
+      alert('Tap the Share button, then "Add to Home Screen" to install FlowIQ');
+    }
+  };
+
+  const handleDismiss = () => {
+    setShow(false);
+    localStorage.setItem('installBannerDismissed', 'true');
+  };
+
+  if (!show) return null;
+
+  return (
+    <div className="col-span-full animate-fade-in-up" data-testid="install-banner">
+      <div className="relative bg-gradient-to-r from-violet-600 to-indigo-600 rounded-3xl p-6 text-white overflow-hidden">
+        {/* Background pattern */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-0 right-0 w-40 h-40 bg-white rounded-full blur-3xl" />
+          <div className="absolute bottom-0 left-0 w-32 h-32 bg-white rounded-full blur-3xl" />
+        </div>
+        
+        <button
+          onClick={handleDismiss}
+          className="absolute top-4 right-4 p-1 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
+        
+        <div className="relative flex items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center flex-shrink-0">
+            <Smartphone className="w-7 h-7" />
+          </div>
+          
+          <div className="flex-1">
+            <h3 className="font-heading font-bold text-lg mb-1">
+              Ajouter le widget sur votre téléphone
+            </h3>
+            <p className="text-white/80 text-sm">
+              Suivez vos dépenses en 2 secondes depuis votre écran d'accueil
+            </p>
+          </div>
+          
+          <button
+            onClick={handleInstall}
+            className="flex items-center gap-2 bg-white text-indigo-600 px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-white/90 transition-colors flex-shrink-0"
+            data-testid="install-btn"
+          >
+            <Download className="w-4 h-4" />
+            Installer
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // Category colors - Premium palette
 const CATEGORY_COLORS = {
@@ -543,6 +643,9 @@ const Dashboard = () => {
 
       {/* Bento Grid Layout */}
       <div className="grid grid-cols-12 gap-5 lg:gap-6">
+        {/* Install App Banner */}
+        <InstallAppBanner />
+        
         {/* Hero Balance Card - Spans 8 cols */}
         <HeroBalanceCard data={dashboardData} loading={loading} />
         
