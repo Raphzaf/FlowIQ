@@ -9,12 +9,20 @@ import {
   AlertCircle,
   X,
   Download,
-  Loader2
+  Loader2,
+  FileText,
+  ArrowRight,
+  Sparkles
 } from "lucide-react";
 import { toast } from "sonner";
 import axios from "axios";
 
-// File Upload Zone Component
+// Premium Skeleton
+const Skeleton = ({ className }) => (
+  <div className={`skeleton ${className}`} />
+);
+
+// Upload Zone Component
 const UploadZone = ({ onFileSelect, isDragging, setIsDragging }) => {
   const fileInputRef = useRef(null);
 
@@ -50,10 +58,8 @@ const UploadZone = ({ onFileSelect, isDragging, setIsDragging }) => {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       onClick={() => fileInputRef.current?.click()}
-      className={`drop-zone relative cursor-pointer border-2 border-dashed rounded-3xl p-12 text-center transition-all ${
-        isDragging 
-          ? 'border-stone-900 bg-stone-100' 
-          : 'border-stone-300 hover:border-stone-400 hover:bg-stone-50'
+      className={`drop-zone cursor-pointer p-12 lg:p-16 text-center transition-all duration-300 ${
+        isDragging ? 'dragging scale-[1.01]' : 'hover:border-stone-400'
       }`}
       data-testid="upload-dropzone"
     >
@@ -67,20 +73,27 @@ const UploadZone = ({ onFileSelect, isDragging, setIsDragging }) => {
       />
       
       <div className="flex flex-col items-center">
-        <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 transition-colors ${
-          isDragging ? 'bg-stone-900' : 'bg-stone-100'
+        {/* Icon */}
+        <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mb-6 transition-all duration-300 ${
+          isDragging 
+            ? 'bg-stone-900 scale-110' 
+            : 'bg-stone-100'
         }`}>
-          <UploadIcon className={`w-8 h-8 ${isDragging ? 'text-white' : 'text-stone-600'}`} />
+          <UploadIcon className={`w-10 h-10 transition-colors ${
+            isDragging ? 'text-white' : 'text-stone-500'
+          }`} />
         </div>
         
+        {/* Text */}
         <h3 className="font-heading text-xl font-semibold text-stone-900 mb-2">
           {isDragging ? 'Drop your file here' : 'Upload Bank Statement'}
         </h3>
         
-        <p className="text-stone-500 mb-4">
-          Drag and drop your CSV file, or click to browse
+        <p className="text-stone-500 mb-6 max-w-sm">
+          Drag and drop your CSV file here, or click to browse from your computer
         </p>
         
+        {/* File type indicator */}
         <div className="flex items-center gap-2 text-sm text-stone-400">
           <FileSpreadsheet className="w-4 h-4" />
           <span>Supports CSV files</span>
@@ -90,19 +103,19 @@ const UploadZone = ({ onFileSelect, isDragging, setIsDragging }) => {
   );
 };
 
-// Selected File Preview
+// File Preview Card
 const FilePreview = ({ file, onRemove, uploading }) => (
-  <Card className="rounded-3xl border-stone-100 bg-white" data-testid="file-preview">
-    <CardContent className="p-6">
+  <Card className="card-premium rounded-2xl animate-fade-in-scale" data-testid="file-preview">
+    <CardContent className="p-5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-income-light flex items-center justify-center">
-            <FileSpreadsheet className="w-6 h-6 text-income" />
+          <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center">
+            <FileSpreadsheet className="w-6 h-6 text-emerald-600" />
           </div>
           <div>
             <p className="font-medium text-stone-900">{file.name}</p>
             <p className="text-sm text-stone-500">
-              {(file.size / 1024).toFixed(1)} KB
+              {(file.size / 1024).toFixed(1)} KB • Ready to upload
             </p>
           </div>
         </div>
@@ -110,10 +123,10 @@ const FilePreview = ({ file, onRemove, uploading }) => (
         {!uploading && (
           <button
             onClick={onRemove}
-            className="p-2 rounded-full hover:bg-stone-100 transition-colors"
+            className="p-2 rounded-xl hover:bg-stone-100 transition-colors"
             data-testid="remove-file-btn"
           >
-            <X className="w-5 h-5 text-stone-500" />
+            <X className="w-5 h-5 text-stone-400 hover:text-stone-600" />
           </button>
         )}
       </div>
@@ -121,37 +134,42 @@ const FilePreview = ({ file, onRemove, uploading }) => (
   </Card>
 );
 
-// Upload Result
+// Upload Result Card
 const UploadResult = ({ result, onReset }) => {
   const isSuccess = result.success;
   
   return (
     <Card 
-      className={`rounded-3xl border-stone-100 ${isSuccess ? 'bg-income-light/30' : 'bg-expense-light/30'}`}
+      className={`card-premium rounded-3xl overflow-hidden animate-fade-in-scale ${
+        isSuccess ? 'ring-1 ring-emerald-200' : 'ring-1 ring-rose-200'
+      }`}
       data-testid="upload-result"
     >
-      <CardContent className="p-8 text-center">
-        <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
-          isSuccess ? 'bg-income-light' : 'bg-expense-light'
+      <CardContent className="p-10 text-center">
+        {/* Icon */}
+        <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 ${
+          isSuccess ? 'bg-emerald-100' : 'bg-rose-100'
         }`}>
           {isSuccess ? (
-            <CheckCircle2 className="w-8 h-8 text-income" />
+            <CheckCircle2 className="w-10 h-10 text-emerald-600" />
           ) : (
-            <AlertCircle className="w-8 h-8 text-expense" />
+            <AlertCircle className="w-10 h-10 text-rose-600" />
           )}
         </div>
         
+        {/* Message */}
         <h3 className="font-heading text-xl font-semibold text-stone-900 mb-2">
           {isSuccess ? 'Upload Successful!' : 'Upload Failed'}
         </h3>
         
-        <p className="text-stone-600 mb-6">
+        <p className="text-stone-600 mb-8 max-w-sm mx-auto">
           {result.message}
         </p>
         
+        {/* Action */}
         <Button
           onClick={onReset}
-          className="rounded-full bg-stone-900 hover:bg-stone-800 text-white px-6"
+          className="rounded-full bg-stone-900 hover:bg-stone-800 text-white px-8 h-12 text-base font-medium shadow-premium hover:shadow-premium-lg transition-all hover:-translate-y-0.5"
           data-testid="upload-another-btn"
         >
           Upload Another File
@@ -161,55 +179,91 @@ const UploadResult = ({ result, onReset }) => {
   );
 };
 
-// CSV Format Guide
+// CSV Format Guide Card
 const FormatGuide = () => (
-  <Card className="rounded-3xl border-stone-100 bg-white" data-testid="format-guide">
-    <CardContent className="p-6">
-      <h3 className="font-heading font-semibold text-stone-900 mb-4">
-        CSV Format Guide
-      </h3>
+  <Card className="card-premium rounded-3xl" data-testid="format-guide">
+    <CardContent className="p-6 lg:p-8">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center">
+          <FileText className="w-5 h-5 text-violet-600" />
+        </div>
+        <h3 className="font-heading font-semibold text-stone-900">
+          CSV Format Guide
+        </h3>
+      </div>
       
-      <p className="text-sm text-stone-600 mb-4">
-        Your CSV file should include the following columns:
+      <p className="text-sm text-stone-600 mb-5">
+        Your CSV file should include these columns:
       </p>
       
-      <div className="bg-stone-50 rounded-2xl p-4 font-mono text-sm overflow-x-auto">
-        <table className="w-full text-left">
+      {/* Table Preview */}
+      <div className="bg-stone-50 rounded-2xl p-4 overflow-x-auto mb-6">
+        <table className="w-full text-sm">
           <thead>
-            <tr className="text-stone-500">
-              <th className="pb-2 pr-4">date</th>
-              <th className="pb-2 pr-4">amount</th>
-              <th className="pb-2 pr-4">category</th>
-              <th className="pb-2">merchant</th>
+            <tr className="text-stone-500 font-medium">
+              <th className="text-left pb-3 pr-4">date</th>
+              <th className="text-left pb-3 pr-4">amount</th>
+              <th className="text-left pb-3 pr-4">category</th>
+              <th className="text-left pb-3">merchant</th>
             </tr>
           </thead>
-          <tbody className="text-stone-700">
-            <tr>
-              <td className="py-1 pr-4">2024-01-15</td>
-              <td className="py-1 pr-4">-45.00</td>
-              <td className="py-1 pr-4">Food & Dining</td>
-              <td className="py-1">Uber Eats</td>
+          <tbody className="font-mono text-stone-700">
+            <tr className="border-t border-stone-200">
+              <td className="py-2 pr-4">2024-01-15</td>
+              <td className="py-2 pr-4">-45.00</td>
+              <td className="py-2 pr-4">Food</td>
+              <td className="py-2">Uber Eats</td>
             </tr>
-            <tr>
-              <td className="py-1 pr-4">2024-01-14</td>
-              <td className="py-1 pr-4">-12.50</td>
-              <td className="py-1 pr-4">Transport</td>
-              <td className="py-1">Uber</td>
+            <tr className="border-t border-stone-200">
+              <td className="py-2 pr-4">2024-01-14</td>
+              <td className="py-2 pr-4">-12.50</td>
+              <td className="py-2 pr-4">Transport</td>
+              <td className="py-2">Uber</td>
             </tr>
           </tbody>
         </table>
       </div>
       
-      <div className="mt-4 flex items-center gap-2">
-        <a 
-          href="/sample.csv" 
-          download
-          className="flex items-center gap-2 text-sm font-medium text-stone-600 hover:text-stone-900 transition-colors"
-          data-testid="download-sample-link"
-        >
-          <Download className="w-4 h-4" />
-          Download sample CSV
-        </a>
+      {/* Download Sample */}
+      <a 
+        href="/sample.csv" 
+        download
+        className="inline-flex items-center gap-2 text-sm font-medium text-stone-600 hover:text-stone-900 transition-colors group"
+        data-testid="download-sample-link"
+      >
+        <Download className="w-4 h-4" />
+        Download sample CSV
+        <ArrowRight className="w-4 h-4 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
+      </a>
+    </CardContent>
+  </Card>
+);
+
+// Features Card
+const FeaturesCard = () => (
+  <Card className="card-premium rounded-3xl bg-gradient-to-br from-stone-900 to-stone-800 text-white">
+    <CardContent className="p-6 lg:p-8">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+          <Sparkles className="w-5 h-5 text-white" />
+        </div>
+        <h3 className="font-heading font-semibold text-white">
+          What You'll Get
+        </h3>
+      </div>
+      
+      <div className="space-y-4">
+        {[
+          "Smart spending insights",
+          "Category breakdown",
+          "Cashflow predictions",
+          "Personalized recommendations"
+        ].map((feature, i) => (
+          <div key={i} className="flex items-center gap-3">
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+            <p className="text-sm text-white/80">{feature}</p>
+          </div>
+        ))}
       </div>
     </CardContent>
   </Card>
@@ -253,8 +307,6 @@ const UploadPage = () => {
       });
       
       toast.success('Transactions imported successfully!');
-      
-      // Refresh dashboard data
       refreshData();
     } catch (error) {
       const errorMessage = error.response?.data?.detail || 'Failed to upload file';
@@ -274,24 +326,24 @@ const UploadPage = () => {
   };
 
   return (
-    <div className="animate-fade-in" data-testid="upload-page">
+    <div data-testid="upload-page">
       {/* Page Header */}
-      <div className="mb-8">
-        <h1 className="font-heading text-3xl md:text-4xl font-bold text-stone-900 mb-2">
+      <div className="mb-8 animate-fade-in">
+        <h1 className="font-heading text-3xl lg:text-4xl font-bold text-stone-900 mb-2">
           Upload Statement
         </h1>
         <p className="text-stone-500">
-          Import your bank transactions to get personalized insights
+          Import your bank transactions to unlock personalized insights
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Upload Area */}
-        <div className="lg:col-span-2 space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
+        {/* Upload Area - 2 cols */}
+        <div className="lg:col-span-2 space-y-5">
           {uploadResult ? (
             <UploadResult result={uploadResult} onReset={handleReset} />
           ) : (
-            <>
+            <div className="animate-fade-in-up">
               {!selectedFile ? (
                 <UploadZone 
                   onFileSelect={handleFileSelect}
@@ -299,7 +351,7 @@ const UploadPage = () => {
                   setIsDragging={setIsDragging}
                 />
               ) : (
-                <>
+                <div className="space-y-5">
                   <FilePreview 
                     file={selectedFile} 
                     onRemove={() => setSelectedFile(null)}
@@ -309,7 +361,7 @@ const UploadPage = () => {
                   <Button
                     onClick={handleUpload}
                     disabled={uploading}
-                    className="w-full rounded-full bg-stone-900 hover:bg-stone-800 text-white h-12 text-base font-medium"
+                    className="w-full rounded-full bg-stone-900 hover:bg-stone-800 text-white h-14 text-base font-medium shadow-premium hover:shadow-premium-lg transition-all hover:-translate-y-0.5 disabled:hover:translate-y-0"
                     data-testid="upload-btn"
                   >
                     {uploading ? (
@@ -320,19 +372,20 @@ const UploadPage = () => {
                     ) : (
                       <>
                         <UploadIcon className="w-5 h-5 mr-2" />
-                        Upload & Import
+                        Upload & Analyze
                       </>
                     )}
                   </Button>
-                </>
+                </div>
               )}
-            </>
+            </div>
           )}
         </div>
 
-        {/* Format Guide */}
-        <div className="lg:col-span-1">
+        {/* Sidebar - 1 col */}
+        <div className="space-y-6 animate-fade-in-up delay-100">
           <FormatGuide />
+          <FeaturesCard />
         </div>
       </div>
     </div>

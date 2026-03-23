@@ -25,10 +25,20 @@ export const ApiContext = createContext();
 
 export const useApi = () => useContext(ApiContext);
 
-// Navigation component
+// Premium Navigation component
 const Navigation = () => {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  
+  // Detect scroll for nav styling
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 10);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
   
   const navItems = [
     { path: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -37,19 +47,31 @@ const Navigation = () => {
   ];
 
   return (
-    <header className="sticky top-0 z-50 w-full backdrop-blur-xl bg-white/80 border-b border-stone-200/50">
+    <header 
+      className={`sticky top-0 z-50 w-full transition-all duration-300 ${
+        scrolled 
+          ? 'bg-white/80 backdrop-blur-xl shadow-sm border-b border-stone-200/50' 
+          : 'bg-transparent'
+      }`}
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between">
+        <div className="flex h-16 lg:h-18 items-center justify-between">
           {/* Logo */}
-          <NavLink to="/" className="flex items-center gap-2 group" data-testid="logo-link">
-            <div className="w-9 h-9 rounded-xl bg-stone-900 flex items-center justify-center group-hover:scale-105 transition-transform">
+          <NavLink 
+            to="/" 
+            className="flex items-center gap-2.5 group" 
+            data-testid="logo-link"
+          >
+            <div className="w-9 h-9 rounded-xl bg-stone-900 flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform duration-200">
               <TrendingUp className="w-5 h-5 text-white" />
             </div>
-            <span className="font-heading font-bold text-xl text-stone-900">FlowIQ</span>
+            <span className="font-heading font-bold text-xl text-stone-900">
+              FlowIQ
+            </span>
           </NavLink>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center gap-1" data-testid="desktop-nav">
+          <nav className="hidden md:flex items-center gap-1 bg-stone-100/80 backdrop-blur-sm rounded-full p-1" data-testid="desktop-nav">
             {navItems.map((item) => {
               const isActive = location.pathname === item.path;
               const Icon = item.icon;
@@ -58,10 +80,10 @@ const Navigation = () => {
                   key={item.path}
                   to={item.path}
                   data-testid={`nav-${item.label.toLowerCase()}`}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
                     isActive
-                      ? "bg-stone-900 text-white"
-                      : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"
+                      ? "bg-white text-stone-900 shadow-sm"
+                      : "text-stone-600 hover:text-stone-900"
                   }`}
                 >
                   <Icon className="w-4 h-4" />
@@ -73,37 +95,46 @@ const Navigation = () => {
 
           {/* Mobile menu button */}
           <button
-            className="md:hidden p-2 rounded-lg hover:bg-stone-100 transition-colors"
+            className="md:hidden w-10 h-10 rounded-xl flex items-center justify-center hover:bg-stone-100 transition-colors"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             data-testid="mobile-menu-btn"
           >
-            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            {mobileMenuOpen ? (
+              <X className="w-5 h-5 text-stone-700" />
+            ) : (
+              <Menu className="w-5 h-5 text-stone-700" />
+            )}
           </button>
         </div>
 
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
-          <nav className="md:hidden py-4 border-t border-stone-200" data-testid="mobile-nav">
-            {navItems.map((item) => {
-              const isActive = location.pathname === item.path;
-              const Icon = item.icon;
-              return (
-                <NavLink
-                  key={item.path}
-                  to={item.path}
-                  onClick={() => setMobileMenuOpen(false)}
-                  data-testid={`mobile-nav-${item.label.toLowerCase()}`}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                    isActive
-                      ? "bg-stone-900 text-white"
-                      : "text-stone-600 hover:bg-stone-100"
-                  }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  {item.label}
-                </NavLink>
-              );
-            })}
+          <nav 
+            className="md:hidden py-4 border-t border-stone-200 animate-fade-in" 
+            data-testid="mobile-nav"
+          >
+            <div className="space-y-1">
+              {navItems.map((item) => {
+                const isActive = location.pathname === item.path;
+                const Icon = item.icon;
+                return (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => setMobileMenuOpen(false)}
+                    data-testid={`mobile-nav-${item.label.toLowerCase()}`}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                      isActive
+                        ? "bg-stone-900 text-white"
+                        : "text-stone-600 hover:bg-stone-100"
+                    }`}
+                  >
+                    <Icon className="w-5 h-5" />
+                    {item.label}
+                  </NavLink>
+                );
+              })}
+            </div>
           </nav>
         )}
       </div>
@@ -172,10 +203,10 @@ function App() {
 
   return (
     <ApiContext.Provider value={apiValue}>
-      <div className="min-h-screen bg-stone-50">
+      <div className="min-h-screen bg-[#FAF9F7]">
         <BrowserRouter>
           <Navigation />
-          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-10">
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/insights" element={<Insights />} />
@@ -189,7 +220,9 @@ function App() {
             style: {
               background: '#1C1917',
               color: '#fff',
-              borderRadius: '12px',
+              borderRadius: '16px',
+              padding: '16px 20px',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
             },
           }}
         />

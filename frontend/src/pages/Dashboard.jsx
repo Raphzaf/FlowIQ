@@ -1,12 +1,17 @@
+import { useEffect, useState, useRef } from "react";
 import { useApi } from "../App";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Card, CardContent } from "../components/ui/card";
 import { 
   Wallet, 
   TrendingUp, 
   TrendingDown, 
   ArrowRight,
   AlertTriangle,
-  CheckCircle2
+  CheckCircle2,
+  Sparkles,
+  ArrowUpRight,
+  ArrowDownRight,
+  Calendar
 } from "lucide-react";
 import { 
   BarChart, 
@@ -18,11 +23,12 @@ import {
   PieChart,
   Pie,
   Cell,
-  Legend
+  AreaChart,
+  Area
 } from "recharts";
 import { Link } from "react-router-dom";
 
-// Category colors
+// Category colors - Premium palette
 const CATEGORY_COLORS = {
   "Food & Dining": "#F43F5E",
   "Transport": "#6366F1",
@@ -36,13 +42,73 @@ const CATEGORY_COLORS = {
   "Uncategorized": "#78716C",
 };
 
-// Loading skeleton component
-const Skeleton = ({ className }) => (
-  <div className={`skeleton ${className}`} />
+// Premium Skeleton Component
+const Skeleton = ({ className, dark = false }) => (
+  <div className={`${dark ? 'skeleton-dark' : 'skeleton'} ${className}`} />
 );
 
-// Format currency
-const formatCurrency = (amount) => {
+// Animated Number Counter
+const AnimatedNumber = ({ value, prefix = "", suffix = "", decimals = 0 }) => {
+  const [displayValue, setDisplayValue] = useState(0);
+  const countRef = useRef(null);
+  
+  useEffect(() => {
+    const target = parseFloat(value) || 0;
+    const duration = 1000;
+    const startTime = Date.now();
+    const startValue = displayValue;
+    
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Easing function
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+      const current = startValue + (target - startValue) * easeOut;
+      
+      setDisplayValue(current);
+      
+      if (progress < 1) {
+        countRef.current = requestAnimationFrame(animate);
+      }
+    };
+    
+    countRef.current = requestAnimationFrame(animate);
+    
+    return () => {
+      if (countRef.current) {
+        cancelAnimationFrame(countRef.current);
+      }
+    };
+  }, [value]);
+  
+  const formatNumber = (num) => {
+    if (Math.abs(num) >= 1000) {
+      return num.toLocaleString('en-US', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+      });
+    }
+    return num.toFixed(decimals);
+  };
+  
+  return (
+    <span className="tabular-nums">
+      {prefix}{formatNumber(displayValue)}{suffix}
+    </span>
+  );
+};
+
+// Format currency helper
+const formatCurrency = (amount, compact = false) => {
+  if (compact && Math.abs(amount) >= 1000) {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      notation: 'compact',
+      maximumFractionDigits: 1,
+    }).format(amount);
+  }
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -51,111 +117,139 @@ const formatCurrency = (amount) => {
   }).format(amount);
 };
 
-// Balance Card Component
-const BalanceCard = ({ data, loading }) => {
+// Hero Balance Card - Premium Design
+const HeroBalanceCard = ({ data, loading }) => {
   if (loading) {
     return (
-      <Card className="col-span-full lg:col-span-8 rounded-3xl border-stone-100 bg-white relative overflow-hidden" data-testid="balance-card-loading">
-        <CardContent className="p-8">
-          <Skeleton className="h-4 w-24 mb-4" />
-          <Skeleton className="h-12 w-48 mb-6" />
-          <div className="flex gap-8">
-            <Skeleton className="h-16 w-32" />
-            <Skeleton className="h-16 w-32" />
-          </div>
-        </CardContent>
-      </Card>
+      <div className="col-span-full lg:col-span-8 card-hero rounded-3xl p-8 lg:p-10" data-testid="balance-card-loading">
+        <Skeleton className="h-5 w-32 mb-4" dark />
+        <Skeleton className="h-16 w-64 mb-8" dark />
+        <div className="flex gap-8">
+          <Skeleton className="h-20 w-36" dark />
+          <Skeleton className="h-20 w-36" dark />
+        </div>
+      </div>
     );
   }
 
+  const isPositive = (data?.total_balance || 0) >= 0;
+
   return (
-    <Card className="col-span-full lg:col-span-8 rounded-3xl border-stone-100 bg-white relative overflow-hidden balance-card" data-testid="balance-card">
-      <CardContent className="p-8">
-        <p className="text-sm font-medium text-stone-500 uppercase tracking-wider mb-2">Total Balance</p>
-        <h2 className="font-heading text-5xl font-bold text-stone-900 tabular-nums mb-6">
-          {formatCurrency(data?.total_balance || 0)}
-        </h2>
+    <div 
+      className="col-span-full lg:col-span-8 card-hero rounded-3xl p-8 lg:p-10 text-white animate-fade-in-up"
+      data-testid="balance-card"
+    >
+      <div className="relative z-10">
+        {/* Label */}
+        <div className="flex items-center gap-2 mb-3">
+          <Wallet className="w-5 h-5 text-white/60" />
+          <p className="metric-label text-white/60">Total Balance</p>
+        </div>
         
-        <div className="flex flex-wrap gap-8">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-income-light flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-income" />
+        {/* Balance Amount */}
+        <h1 className="metric-value text-5xl lg:text-6xl text-white mb-8">
+          <AnimatedNumber 
+            value={Math.abs(data?.total_balance || 0)} 
+            prefix={isPositive ? "$" : "-$"}
+            decimals={0}
+          />
+        </h1>
+        
+        {/* Income / Expense Row */}
+        <div className="flex flex-wrap gap-6 lg:gap-10">
+          {/* Income */}
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 flex items-center justify-center backdrop-blur-sm">
+              <ArrowUpRight className="w-6 h-6 text-emerald-400" />
             </div>
             <div>
-              <p className="text-xs text-stone-500 uppercase tracking-wider">Income</p>
-              <p className="font-heading font-semibold text-lg text-stone-900 tabular-nums">
-                {formatCurrency(data?.total_income || 0)}
+              <p className="text-sm text-white/50 font-medium mb-0.5">Income</p>
+              <p className="text-xl font-semibold text-white tabular-nums">
+                <AnimatedNumber value={data?.total_income || 0} prefix="$" />
               </p>
             </div>
           </div>
           
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-expense-light flex items-center justify-center">
-              <TrendingDown className="w-5 h-5 text-expense" />
+          {/* Expenses */}
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/20 flex items-center justify-center backdrop-blur-sm">
+              <ArrowDownRight className="w-6 h-6 text-rose-400" />
             </div>
             <div>
-              <p className="text-xs text-stone-500 uppercase tracking-wider">Expenses</p>
-              <p className="font-heading font-semibold text-lg text-stone-900 tabular-nums">
-                {formatCurrency(data?.total_expenses || 0)}
+              <p className="text-sm text-white/50 font-medium mb-0.5">Expenses</p>
+              <p className="text-xl font-semibold text-white tabular-nums">
+                <AnimatedNumber value={data?.total_expenses || 0} prefix="$" />
               </p>
             </div>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 };
 
-// Cashflow Prediction Card
+// Cashflow Prediction Card - Compact Premium
 const CashflowCard = ({ cashflow, loading }) => {
   if (loading) {
     return (
-      <Card className="col-span-full lg:col-span-4 rounded-3xl border-stone-100 bg-white" data-testid="cashflow-card-loading">
-        <CardContent className="p-6">
-          <Skeleton className="h-4 w-32 mb-4" />
-          <Skeleton className="h-8 w-24 mb-4" />
-          <Skeleton className="h-16 w-full" />
+      <Card className="col-span-full lg:col-span-4 card-premium rounded-3xl" data-testid="cashflow-card-loading">
+        <CardContent className="p-6 lg:p-8">
+          <Skeleton className="h-4 w-36 mb-6" />
+          <Skeleton className="h-12 w-32 mb-4" />
+          <Skeleton className="h-20 w-full" />
         </CardContent>
       </Card>
     );
   }
 
   const isWarning = cashflow?.is_warning;
+  const projectedBalance = cashflow?.predicted_end_balance || 0;
 
   return (
-    <Card className={`col-span-full lg:col-span-4 rounded-3xl border-stone-100 bg-white ${isWarning ? 'glow-expense' : 'glow-income'}`} data-testid="cashflow-card">
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-medium text-stone-500 uppercase tracking-wider">Month-End Forecast</p>
+    <Card 
+      className={`col-span-full lg:col-span-4 card-premium rounded-3xl overflow-hidden animate-fade-in-up delay-100 ${
+        isWarning ? 'ring-1 ring-rose-200' : ''
+      }`}
+      data-testid="cashflow-card"
+    >
+      <CardContent className="p-6 lg:p-8">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-stone-400" />
+            <p className="text-sm font-medium text-stone-500">Month-End Forecast</p>
+          </div>
           {isWarning ? (
-            <div className="w-8 h-8 rounded-full bg-expense-light flex items-center justify-center">
-              <AlertTriangle className="w-4 h-4 text-expense" />
-            </div>
+            <span className="badge badge-error">Alert</span>
           ) : (
-            <div className="w-8 h-8 rounded-full bg-income-light flex items-center justify-center">
-              <CheckCircle2 className="w-4 h-4 text-income" />
-            </div>
+            <span className="badge badge-success">On Track</span>
           )}
         </div>
         
-        <h3 className={`font-heading text-3xl font-bold tabular-nums mb-2 ${isWarning ? 'text-expense' : 'text-income'}`}>
-          {formatCurrency(cashflow?.predicted_end_balance || 0)}
-        </h3>
+        {/* Projected Balance */}
+        <div className="mb-6">
+          <p className={`metric-value text-4xl ${isWarning ? 'text-rose-600' : 'text-emerald-600'}`}>
+            <AnimatedNumber 
+              value={Math.abs(projectedBalance)} 
+              prefix={projectedBalance >= 0 ? "$" : "-$"}
+            />
+          </p>
+          <p className="text-sm text-stone-500 mt-1">projected balance</p>
+        </div>
         
-        <p className="text-sm text-stone-600 leading-relaxed">
-          {cashflow?.message}
-        </p>
-        
-        <div className="mt-4 pt-4 border-t border-stone-100">
-          <div className="flex justify-between text-sm">
-            <span className="text-stone-500">Daily avg spending</span>
-            <span className="font-medium text-stone-900 tabular-nums">
-              {formatCurrency(cashflow?.daily_average_spending || 0)}
+        {/* Stats */}
+        <div className="space-y-3 pt-4 border-t border-stone-100">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-stone-500">Daily average</span>
+            <span className="text-sm font-semibold text-stone-900 tabular-nums">
+              ${(cashflow?.daily_average_spending || 0).toLocaleString()}
             </span>
           </div>
-          <div className="flex justify-between text-sm mt-2">
-            <span className="text-stone-500">Days remaining</span>
-            <span className="font-medium text-stone-900">{cashflow?.days_remaining || 0} days</span>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-stone-500">Days remaining</span>
+            <span className="text-sm font-semibold text-stone-900">
+              {cashflow?.days_remaining || 0} days
+            </span>
           </div>
         </div>
       </CardContent>
@@ -163,16 +257,14 @@ const CashflowCard = ({ cashflow, loading }) => {
   );
 };
 
-// Spending Chart Component
+// Monthly Spending Chart - Premium Design
 const SpendingChart = ({ data, loading }) => {
   if (loading) {
     return (
-      <Card className="col-span-full lg:col-span-8 rounded-3xl border-stone-100 bg-white" data-testid="spending-chart-loading">
-        <CardHeader className="p-6 pb-2">
-          <Skeleton className="h-6 w-40" />
-        </CardHeader>
-        <CardContent className="p-6 pt-2">
-          <Skeleton className="h-64 w-full" />
+      <Card className="col-span-full lg:col-span-8 card-premium rounded-3xl" data-testid="spending-chart-loading">
+        <CardContent className="p-6 lg:p-8">
+          <Skeleton className="h-6 w-44 mb-8" />
+          <Skeleton className="h-72 w-full rounded-2xl" />
         </CardContent>
       </Card>
     );
@@ -180,42 +272,60 @@ const SpendingChart = ({ data, loading }) => {
 
   const chartData = data?.spending_by_month || [];
 
+  // Custom tooltip
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white/95 backdrop-blur-lg border border-stone-100 rounded-2xl px-4 py-3 shadow-premium">
+          <p className="font-heading font-semibold text-stone-900 mb-1">{label}</p>
+          <p className="text-sm text-stone-600">
+            Spent: <span className="font-semibold text-stone-900">{formatCurrency(payload[0].value)}</span>
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
-    <Card className="col-span-full lg:col-span-8 rounded-3xl border-stone-100 bg-white" data-testid="spending-chart">
-      <CardHeader className="p-6 pb-2">
-        <CardTitle className="font-heading text-xl font-semibold text-stone-900">
-          Monthly Spending
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-6 pt-2">
-        <div className="h-64 w-full">
-          <ResponsiveContainer width="100%" height={256}>
-            <BarChart data={chartData} barCategoryGap="20%">
+    <Card className="col-span-full lg:col-span-8 card-premium rounded-3xl animate-fade-in-up delay-150" data-testid="spending-chart">
+      <CardContent className="p-6 lg:p-8">
+        <div className="flex items-center justify-between mb-8">
+          <h3 className="font-heading text-lg font-semibold text-stone-900">
+            Monthly Spending
+          </h3>
+          <span className="text-sm text-stone-500">Last 6 months</span>
+        </div>
+        
+        <div className="h-72">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} barCategoryGap="25%">
+              <defs>
+                <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#1C1917" stopOpacity={1}/>
+                  <stop offset="100%" stopColor="#44403C" stopOpacity={1}/>
+                </linearGradient>
+              </defs>
               <XAxis 
                 dataKey="month" 
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: '#78716C', fontSize: 12 }}
+                tick={{ fill: '#A8A29E', fontSize: 12, fontWeight: 500 }}
+                dy={8}
               />
               <YAxis 
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: '#78716C', fontSize: 12 }}
-                tickFormatter={(value) => `$${value / 1000}k`}
+                tick={{ fill: '#A8A29E', fontSize: 12 }}
+                tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                dx={-8}
               />
-              <Tooltip 
-                formatter={(value) => [formatCurrency(value), 'Spending']}
-                contentStyle={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                  border: '1px solid #E7E5E4',
-                  borderRadius: '12px',
-                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.1)',
-                }}
-              />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.02)', radius: 8 }} />
               <Bar 
                 dataKey="amount" 
-                fill="#1C1917" 
-                radius={[8, 8, 0, 0]}
+                fill="url(#barGradient)"
+                radius={[10, 10, 10, 10]}
+                maxBarSize={48}
               />
             </BarChart>
           </ResponsiveContainer>
@@ -225,16 +335,21 @@ const SpendingChart = ({ data, loading }) => {
   );
 };
 
-// Category Breakdown Chart
+// Category Breakdown - Donut Chart
 const CategoryChart = ({ data, loading }) => {
   if (loading) {
     return (
-      <Card className="col-span-full lg:col-span-4 rounded-3xl border-stone-100 bg-white" data-testid="category-chart-loading">
-        <CardHeader className="p-6 pb-2">
-          <Skeleton className="h-6 w-40" />
-        </CardHeader>
-        <CardContent className="p-6 pt-2">
-          <Skeleton className="h-64 w-full rounded-full" />
+      <Card className="col-span-full lg:col-span-4 card-premium rounded-3xl" data-testid="category-chart-loading">
+        <CardContent className="p-6 lg:p-8">
+          <Skeleton className="h-6 w-36 mb-8" />
+          <div className="flex justify-center">
+            <Skeleton className="h-48 w-48 rounded-full" />
+          </div>
+          <div className="space-y-3 mt-6">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-6 w-full" />
+            ))}
+          </div>
         </CardContent>
       </Card>
     );
@@ -244,27 +359,30 @@ const CategoryChart = ({ data, loading }) => {
   const chartData = Object.entries(categories)
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value)
-    .slice(0, 6);
+    .slice(0, 5);
+  
+  const total = chartData.reduce((sum, item) => sum + item.value, 0);
 
   return (
-    <Card className="col-span-full lg:col-span-4 rounded-3xl border-stone-100 bg-white" data-testid="category-chart">
-      <CardHeader className="p-6 pb-2">
-        <CardTitle className="font-heading text-xl font-semibold text-stone-900">
-          By Category
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-6 pt-2">
-        <div className="h-64 w-full">
-          <ResponsiveContainer width="100%" height={256}>
+    <Card className="col-span-full lg:col-span-4 card-premium rounded-3xl animate-fade-in-up delay-200" data-testid="category-chart">
+      <CardContent className="p-6 lg:p-8">
+        <h3 className="font-heading text-lg font-semibold text-stone-900 mb-6">
+          Spending by Category
+        </h3>
+        
+        {/* Donut Chart */}
+        <div className="h-52 mb-6">
+          <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={chartData}
                 cx="50%"
                 cy="50%"
-                innerRadius={50}
-                outerRadius={80}
-                paddingAngle={4}
+                innerRadius={60}
+                outerRadius={85}
+                paddingAngle={3}
                 dataKey="value"
+                stroke="none"
               >
                 {chartData.map((entry, index) => (
                   <Cell 
@@ -277,36 +395,55 @@ const CategoryChart = ({ data, loading }) => {
                 formatter={(value) => formatCurrency(value)}
                 contentStyle={{
                   backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                  border: '1px solid #E7E5E4',
+                  border: '1px solid rgba(0,0,0,0.05)',
                   borderRadius: '12px',
-                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.1)',
+                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.08)',
                 }}
-              />
-              <Legend 
-                verticalAlign="bottom"
-                height={36}
-                formatter={(value) => <span className="text-xs text-stone-600">{value}</span>}
               />
             </PieChart>
           </ResponsiveContainer>
+        </div>
+        
+        {/* Legend */}
+        <div className="space-y-3">
+          {chartData.map((item, index) => {
+            const pct = total > 0 ? ((item.value / total) * 100).toFixed(0) : 0;
+            return (
+              <div key={index} className="flex items-center justify-between group">
+                <div className="flex items-center gap-3">
+                  <div 
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: CATEGORY_COLORS[item.name] || '#78716C' }}
+                  />
+                  <span className="text-sm text-stone-600 group-hover:text-stone-900 transition-colors">
+                    {item.name}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-stone-900 tabular-nums">
+                    {formatCurrency(item.value)}
+                  </span>
+                  <span className="text-xs text-stone-400 w-8 text-right">{pct}%</span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </CardContent>
     </Card>
   );
 };
 
-// Quick Insights Preview
+// Quick Insights Section
 const QuickInsights = ({ insights, loading }) => {
   if (loading) {
     return (
-      <Card className="col-span-full rounded-3xl border-stone-100 bg-white" data-testid="quick-insights-loading">
-        <CardHeader className="p-6 pb-2">
-          <Skeleton className="h-6 w-32" />
-        </CardHeader>
-        <CardContent className="p-6 pt-2">
+      <Card className="col-span-full card-premium rounded-3xl" data-testid="quick-insights-loading">
+        <CardContent className="p-6 lg:p-8">
+          <Skeleton className="h-6 w-40 mb-6" />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-24 w-full" />
+              <Skeleton key={i} className="h-28 w-full rounded-2xl" />
             ))}
           </div>
         </CardContent>
@@ -318,42 +455,68 @@ const QuickInsights = ({ insights, loading }) => {
 
   const getInsightStyle = (type) => {
     switch (type) {
-      case 'warning': return 'insight-warning bg-warning-light/30';
-      case 'positive': return 'insight-positive bg-income-light/30';
-      case 'tip': return 'insight-tip bg-stone-100';
-      default: return 'insight-info bg-insight-light/30';
+      case 'warning':
+      case 'critical':
+        return 'insight-warning';
+      case 'positive':
+        return 'insight-positive';
+      case 'tip':
+        return 'insight-tip';
+      default:
+        return 'insight-info';
+    }
+  };
+
+  const getInsightIcon = (type) => {
+    switch (type) {
+      case 'warning':
+      case 'critical':
+        return <AlertTriangle className="w-5 h-5 text-amber-600" />;
+      case 'positive':
+        return <CheckCircle2 className="w-5 h-5 text-emerald-600" />;
+      default:
+        return <Sparkles className="w-5 h-5 text-indigo-600" />;
     }
   };
 
   return (
-    <Card className="col-span-full rounded-3xl border-stone-100 bg-white" data-testid="quick-insights">
-      <CardHeader className="p-6 pb-2 flex flex-row items-center justify-between">
-        <CardTitle className="font-heading text-xl font-semibold text-stone-900">
-          Quick Insights
-        </CardTitle>
-        <Link 
-          to="/insights" 
-          className="flex items-center gap-1 text-sm font-medium text-stone-600 hover:text-stone-900 transition-colors"
-          data-testid="view-all-insights-link"
-        >
-          View all <ArrowRight className="w-4 h-4" />
-        </Link>
-      </CardHeader>
-      <CardContent className="p-6 pt-2">
+    <Card className="col-span-full card-premium rounded-3xl animate-fade-in-up delay-250" data-testid="quick-insights">
+      <CardContent className="p-6 lg:p-8">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="font-heading text-lg font-semibold text-stone-900">
+            Quick Insights
+          </h3>
+          <Link 
+            to="/insights" 
+            className="flex items-center gap-1.5 text-sm font-medium text-stone-500 hover:text-stone-900 transition-colors group"
+            data-testid="view-all-insights-link"
+          >
+            View all 
+            <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+          </Link>
+        </div>
+        
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {topInsights.map((insight, index) => (
             <div
               key={insight.id}
-              className={`p-4 rounded-2xl ${getInsightStyle(insight.type)} animate-fade-in`}
-              style={{ animationDelay: `${index * 100}ms` }}
-              data-testid={`insight-card-${index}`}
+              className={`insight-card ${getInsightStyle(insight.type)} animate-fade-in-up`}
+              style={{ animationDelay: `${(index + 3) * 80}ms` }}
+              data-testid={`insight-preview-${index}`}
             >
-              <h4 className="font-heading font-semibold text-stone-900 mb-1">
-                {insight.title}
-              </h4>
-              <p className="text-sm text-stone-600 line-clamp-2">
-                {insight.description}
-              </p>
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 mt-0.5">
+                  {getInsightIcon(insight.type)}
+                </div>
+                <div className="min-w-0">
+                  <h4 className="font-semibold text-stone-900 text-sm mb-1 line-clamp-1">
+                    {insight.title}
+                  </h4>
+                  <p className="text-sm text-stone-600 line-clamp-2 leading-relaxed">
+                    {insight.description}
+                  </p>
+                </div>
+              </div>
             </div>
           ))}
         </div>
@@ -367,10 +530,10 @@ const Dashboard = () => {
   const { dashboardData, insights, cashflow, loading } = useApi();
 
   return (
-    <div className="animate-fade-in" data-testid="dashboard-page">
+    <div data-testid="dashboard-page">
       {/* Page Header */}
-      <div className="mb-8">
-        <h1 className="font-heading text-3xl md:text-4xl font-bold text-stone-900 mb-2">
+      <div className="mb-8 animate-fade-in">
+        <h1 className="font-heading text-3xl lg:text-4xl font-bold text-stone-900 mb-2">
           Dashboard
         </h1>
         <p className="text-stone-500">
@@ -379,20 +542,20 @@ const Dashboard = () => {
       </div>
 
       {/* Bento Grid Layout */}
-      <div className="grid grid-cols-12 gap-6">
-        {/* Balance Card - Large */}
-        <BalanceCard data={dashboardData} loading={loading} />
+      <div className="grid grid-cols-12 gap-5 lg:gap-6">
+        {/* Hero Balance Card - Spans 8 cols */}
+        <HeroBalanceCard data={dashboardData} loading={loading} />
         
-        {/* Cashflow Prediction */}
+        {/* Cashflow Prediction - Spans 4 cols */}
         <CashflowCard cashflow={cashflow} loading={loading} />
         
-        {/* Spending Chart */}
+        {/* Monthly Spending Chart - Spans 8 cols */}
         <SpendingChart data={dashboardData} loading={loading} />
         
-        {/* Category Breakdown */}
+        {/* Category Breakdown - Spans 4 cols */}
         <CategoryChart data={dashboardData} loading={loading} />
         
-        {/* Quick Insights */}
+        {/* Quick Insights - Full width */}
         <QuickInsights insights={insights} loading={loading} />
       </div>
     </div>
