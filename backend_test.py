@@ -107,6 +107,56 @@ class FlowIQAPITester:
         
         return success, data
 
+    def test_advanced_insights_endpoint(self):
+        """Test advanced insights endpoint with personality and health score"""
+        success, data = self.run_test("Get Advanced Insights", "GET", "insights-advanced", 200)
+        
+        if success and data:
+            # Validate structure
+            required_fields = ['insights', 'personality', 'health_score']
+            missing_fields = [field for field in required_fields if field not in data]
+            
+            if missing_fields:
+                print(f"⚠️  Warning: Missing fields in advanced insights response: {missing_fields}")
+                return False, data
+            
+            # Check insights array
+            insights = data.get('insights', [])
+            print(f"   Found {len(insights)} advanced insights")
+            
+            if insights:
+                insight_types = [insight.get('type') for insight in insights]
+                insight_ids = [insight.get('id') for insight in insights]
+                print(f"   Insight types: {set(insight_types)}")
+                print(f"   Insight IDs: {insight_ids[:3]}...")  # Show first 3
+                
+                # Check for specific insights mentioned in requirements
+                expected_insights = [
+                    'spending_trend', 'category_dominance', 'subscriptions', 
+                    'cashflow_warning', 'weekend_spending', 'micro_spending', 'savings_projection'
+                ]
+                found_insights = [id for id in insight_ids if any(expected in id for expected in expected_insights)]
+                print(f"   Expected insights found: {found_insights}")
+            
+            # Check personality
+            personality = data.get('personality', {})
+            if personality:
+                print(f"   Personality type: {personality.get('type', 'unknown')}")
+                print(f"   Personality label: {personality.get('label', 'N/A')}")
+                print(f"   Traits count: {len(personality.get('traits', []))}")
+                print(f"   Recommendations count: {len(personality.get('recommendations', []))}")
+            
+            # Check health score
+            health_score = data.get('health_score', {})
+            if health_score:
+                print(f"   Health score: {health_score.get('score', 0)}/100")
+                print(f"   Health grade: {health_score.get('grade', 'N/A')}")
+                print(f"   Health factors count: {len(health_score.get('factors', []))}")
+            
+            print("✅ Advanced insights data structure is valid")
+        
+        return success, data
+
     def test_cashflow_prediction(self):
         """Test cashflow prediction endpoint"""
         success, data = self.run_test("Cashflow Prediction", "GET", "cashflow-prediction", 200)
@@ -172,6 +222,7 @@ class FlowIQAPITester:
         self.test_get_transactions()
         self.test_dashboard_endpoint()
         self.test_insights_endpoint()
+        self.test_advanced_insights_endpoint()  # New advanced insights test
         self.test_cashflow_prediction()
         
         # Test transaction creation

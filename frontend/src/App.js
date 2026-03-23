@@ -114,6 +114,7 @@ const Navigation = () => {
 function App() {
   const [dashboardData, setDashboardData] = useState(null);
   const [insights, setInsights] = useState([]);
+  const [advancedInsights, setAdvancedInsights] = useState(null);
   const [cashflow, setCashflow] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -133,15 +134,17 @@ function App() {
       }
       
       // Fetch all data in parallel
-      const [dashRes, insightsRes, cashflowRes, newTransRes] = await Promise.all([
+      const [dashRes, insightsRes, advancedInsightsRes, cashflowRes, newTransRes] = await Promise.all([
         axios.get(`${API}/dashboard`),
         axios.get(`${API}/insights`),
+        axios.get(`${API}/insights-advanced`),
         axios.get(`${API}/cashflow-prediction`),
         axios.get(`${API}/transactions`),
       ]);
       
       setDashboardData(dashRes.data);
       setInsights(insightsRes.data);
+      setAdvancedInsights(advancedInsightsRes.data);
       setCashflow(cashflowRes.data);
       setTransactions(newTransRes.data);
     } catch (error) {
@@ -160,6 +163,7 @@ function App() {
     API,
     dashboardData,
     insights,
+    advancedInsights,
     cashflow,
     transactions,
     loading,

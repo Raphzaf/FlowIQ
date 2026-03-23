@@ -6,12 +6,15 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone, timedelta
 import csv
 import io
 import random
+
+# Import insights engine
+from insights_engine import generate_insights
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -35,7 +38,7 @@ class Transaction(BaseModel):
     amount: float
     category: str
     merchant: str
-    type: str = "expense"  # expense or income
+    type: str = "expense"
 
 class TransactionCreate(BaseModel):
     date: str
@@ -51,13 +54,6 @@ class DashboardSummary(BaseModel):
     monthly_spending: float
     categories: dict
     spending_by_month: List[dict]
-
-class Insight(BaseModel):
-    id: str
-    type: str  # warning, tip, info, positive
-    title: str
-    description: str
-    icon: str
 
 class CashflowPrediction(BaseModel):
     current_balance: float
@@ -159,7 +155,6 @@ async def delete_transaction(transaction_id: str):
 @api_router.post("/seed-demo-data")
 async def seed_demo_data():
     """Seed the database with demo data"""
-    # Check if data already exists
     count = await db.transactions.count_documents({})
     if count > 0:
         return {"message": "Demo data already exists", "count": count}
@@ -188,12 +183,10 @@ async def get_dashboard():
             spending_by_month=[]
         )
     
-    # Calculate totals
     total_income = sum(t["amount"] for t in transactions if t.get("type") == "income")
     total_expenses = sum(t["amount"] for t in transactions if t.get("type") == "expense")
     total_balance = total_income - total_expenses
     
-    # Current month spending
     today = datetime.now(timezone.utc)
     current_month = today.strftime("%Y-%m")
     monthly_spending = sum(
@@ -201,17 +194,14 @@ async def get_dashboard():
         if t.get("type") == "expense" and t["date"].startswith(current_month)
     )
     
-    # Categories breakdown
     categories = {}
     for t in transactions:
         if t.get("type") == "expense":
             cat = t["category"]
             categories[cat] = categories.get(cat, 0) + t["amount"]
     
-    # Round category values
     categories = {k: round(v, 2) for k, v in categories.items()}
     
-    # Spending by month (last 6 months)
     spending_by_month = []
     for i in range(5, -1, -1):
         month_date = today - timedelta(days=30 * i)
@@ -237,116 +227,64 @@ async def get_dashboard():
         spending_by_month=spending_by_month
     )
 
-@api_router.get("/insights", response_model=List[Insight])
-async def get_insights():
+@api_router.get("/insights-advanced")
+async def get_advanced_insights():
+    """Get advanced AI-powered insights with personality and health score"""
     transactions = await db.transactions.find({}, {"_id": 0}).to_list(1000)
-    insights = []
     
     if not transactions:
-        return [Insight(
-            id=str(uuid.uuid4()),
-            type="info",
-            title="No Data Yet",
-            description="Upload your bank statement to get personalized insights.",
-            icon="upload"
-        )]
+        return {
+            "insights": [{
+                "id": "no_data",
+                "type": "info",
+                "icon": "upload",
+                "title": "No Data Yet",
+                "headline": "Upload your bank statement to get started",
+                "description": "Once you upload your transactions, we'll analyze your spending patterns and provide personalized insights.",
+                "data": {},
+                "priority": 0
+            }],
+            "personality": {
+                "type": "unknown",
+                "label": "New User",
+                "emoji": "👋",
+                "description": "We need more data to understand your spending style.",
+                "traits": [],
+                "recommendations": ["Upload your bank statement to get personalized insights."]
+            },
+            "health_score": {
+                "score": 0,
+                "grade": "N/A",
+                "description": "Not enough data to calculate your score.",
+                "factors": []
+            }
+        }
     
-    today = datetime.now(timezone.utc)
-    current_month = today.strftime("%Y-%m")
-    last_month = (today - timedelta(days=30)).strftime("%Y-%m")
+    # Generate insights using the engine
+    result = generate_insights(transactions)
     
-    # Calculate current and last month expenses
-    current_expenses = [t for t in transactions if t.get("type") == "expense" and t["date"].startswith(current_month)]
-    last_expenses = [t for t in transactions if t.get("type") == "expense" and t["date"].startswith(last_month)]
+    # Sort insights by priority (lower = more important)
+    result["insights"] = sorted(result["insights"], key=lambda x: x.get("priority", 99))
     
-    current_total = sum(t["amount"] for t in current_expenses)
-    last_total = sum(t["amount"] for t in last_expenses)
+    return result
+
+@api_router.get("/insights")
+async def get_insights():
+    """Legacy insights endpoint - returns simplified format"""
+    advanced = await get_advanced_insights()
     
-    # Insight 1: Month over month comparison
-    if last_total > 0:
-        change = ((current_total - last_total) / last_total) * 100
-        if change > 0:
-            insights.append(Insight(
-                id=str(uuid.uuid4()),
-                type="warning",
-                title="Spending Increased",
-                description=f"You've spent {abs(change):.0f}% more than last month. Consider reviewing your expenses.",
-                icon="trending-up"
-            ))
-        else:
-            insights.append(Insight(
-                id=str(uuid.uuid4()),
-                type="positive",
-                title="Great Job!",
-                description=f"You've spent {abs(change):.0f}% less than last month. Keep it up!",
-                icon="trending-down"
-            ))
+    # Convert to simple format for backwards compatibility
+    simple_insights = []
+    for insight in advanced.get("insights", []):
+        simple_insights.append({
+            "id": insight.get("id", str(uuid.uuid4())),
+            "type": insight.get("type", "info"),
+            "title": insight.get("title", ""),
+            "description": insight.get("headline", "") + " " + insight.get("description", ""),
+            "icon": insight.get("icon", "info")
+        })
     
-    # Insight 2: Subscription count
-    subscriptions = [t for t in transactions if t["category"] == "Subscriptions"]
-    unique_subs = len(set(t["merchant"] for t in subscriptions))
-    if unique_subs > 0:
-        sub_total = sum(t["amount"] for t in subscriptions if t["date"].startswith(current_month))
-        insights.append(Insight(
-            id=str(uuid.uuid4()),
-            type="info",
-            title=f"You Have {unique_subs} Active Subscriptions",
-            description=f"Your subscriptions cost ${sub_total:.2f} this month. Review if you're using all of them.",
-            icon="credit-card"
-        ))
-    
-    # Insight 3: Top spending category
-    categories = {}
-    for t in transactions:
-        if t.get("type") == "expense":
-            cat = t["category"]
-            categories[cat] = categories.get(cat, 0) + t["amount"]
-    
-    if categories:
-        top_category = max(categories, key=categories.get)
-        insights.append(Insight(
-            id=str(uuid.uuid4()),
-            type="info",
-            title=f"Top Spending: {top_category}",
-            description=f"You've spent ${categories[top_category]:.2f} on {top_category}. This is your biggest expense category.",
-            icon="pie-chart"
-        ))
-    
-    # Insight 4: Savings tip
-    if "Food & Dining" in categories and categories["Food & Dining"] > 300:
-        potential_savings = categories["Food & Dining"] * 0.2
-        insights.append(Insight(
-            id=str(uuid.uuid4()),
-            type="tip",
-            title="Savings Opportunity",
-            description=f"You could save ${potential_savings:.2f} by reducing dining out by 20%.",
-            icon="lightbulb"
-        ))
-    
-    # Insight 5: Weekend spending
-    weekend_spending = sum(
-        t["amount"] for t in transactions 
-        if t.get("type") == "expense" and 
-        datetime.strptime(t["date"].strip(), "%Y-%m-%d").weekday() >= 5
-    )
-    weekday_spending = sum(
-        t["amount"] for t in transactions 
-        if t.get("type") == "expense" and 
-        datetime.strptime(t["date"].strip(), "%Y-%m-%d").weekday() < 5
-    )
-    
-    if weekday_spending > 0:
-        weekend_ratio = weekend_spending / (weekend_spending + weekday_spending) * 100
-        if weekend_ratio > 40:
-            insights.append(Insight(
-                id=str(uuid.uuid4()),
-                type="warning",
-                title="High Weekend Spending",
-                description=f"{weekend_ratio:.0f}% of your spending happens on weekends. Plan weekend activities to save more.",
-                icon="calendar"
-            ))
-    
-    return insights[:5]  # Return top 5 insights
+    return simple_insights[:5]
 
 @api_router.get("/cashflow-prediction", response_model=CashflowPrediction)
 async def get_cashflow_prediction():
@@ -364,12 +302,10 @@ async def get_cashflow_prediction():
     
     today = datetime.now(timezone.utc)
     
-    # Calculate current balance
     total_income = sum(t["amount"] for t in transactions if t.get("type") == "income")
     total_expenses = sum(t["amount"] for t in transactions if t.get("type") == "expense")
     current_balance = total_income - total_expenses
     
-    # Calculate daily average spending (last 30 days)
     thirty_days_ago = today - timedelta(days=30)
     recent_expenses = [
         t for t in transactions 
@@ -379,16 +315,13 @@ async def get_cashflow_prediction():
     
     daily_average = sum(t["amount"] for t in recent_expenses) / 30 if recent_expenses else 0
     
-    # Days remaining in month
     import calendar
     _, days_in_month = calendar.monthrange(today.year, today.month)
     days_remaining = days_in_month - today.day
     
-    # Predicted spending for rest of month
     predicted_spending = daily_average * days_remaining
     predicted_end_balance = current_balance - predicted_spending
     
-    # Determine warning
     is_warning = predicted_end_balance < 0
     
     if is_warning:
@@ -420,7 +353,6 @@ async def upload_csv(file: UploadFile = File(...)):
         
         transactions = []
         for row in reader:
-            # Try to map common CSV column names
             date = row.get('date') or row.get('Date') or row.get('DATE') or row.get('Transaction Date')
             amount = row.get('amount') or row.get('Amount') or row.get('AMOUNT') or row.get('Debit')
             category = row.get('category') or row.get('Category') or row.get('CATEGORY') or "Uncategorized"
@@ -429,11 +361,9 @@ async def upload_csv(file: UploadFile = File(...)):
             
             if date and amount:
                 try:
-                    # Parse amount (handle negative values and currency symbols)
                     amount_str = str(amount).replace('$', '').replace(',', '').strip()
                     amount_val = abs(float(amount_str))
                     
-                    # Determine if expense or income
                     if float(amount_str) > 0 and trans_type.lower() not in ['expense', 'debit']:
                         trans_type = "income"
                     else:
@@ -444,16 +374,15 @@ async def upload_csv(file: UploadFile = File(...)):
                         "date": date,
                         "amount": amount_val,
                         "category": category,
-                        "merchant": merchant[:100],  # Limit merchant name length
+                        "merchant": merchant[:100],
                         "type": trans_type
                     })
                 except ValueError:
-                    continue  # Skip rows with invalid amounts
+                    continue
         
         if not transactions:
             raise HTTPException(status_code=400, detail="No valid transactions found in CSV")
         
-        # Insert transactions
         await db.transactions.insert_many(transactions)
         
         return {
