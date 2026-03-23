@@ -59,6 +59,15 @@ Young professionals (20–35) who want better control over their money but don't
 - [x] **Navigation**: Pill-style with glassmorphism backdrop
 - [x] **Insights**: Color-coded cards (success/warning/info/tip) with badges
 
+### Quick Expense Entry (v4) ✅
+- [x] **Floating Action Button (FAB)**: Bottom-right corner, opens expense drawer
+- [x] **Quick Entry Drawer**: Slide-up modal with amount input and quick amounts ($5-$100)
+- [x] **Category Selection**: 8 categories with icons, frequent categories marked with green dot
+- [x] **Merchant Suggestions**: Recent merchants auto-suggested based on selected category
+- [x] **Success Animation**: Full-screen feedback with category-specific messages (e.g., "Coffee run tracked! ☕")
+- [x] **Transaction History Page**: Search, date/category filters, edit/delete modals
+- [x] **Weekly Budget Widget**: Progress bar showing spending vs $500 weekly budget
+
 ## Smart Insights Logic (v2)
 1. **Month over Month**: Compares current vs last month spending
 2. **Subscription Count**: Identifies recurring subscriptions
