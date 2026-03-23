@@ -1,0 +1,131 @@
+{
+  "identity": {
+    "name": "FlowIQ",
+    "persona": "The Smart CFO",
+    "tone": "Premium, Intelligent, Calm, Predictive",
+    "aesthetic": "Apple-Minimalist meets Swiss-Utility",
+    "theme_strategy": "Light Mode (Primary) with Dark Mode Support. Light mode uses 'Stone/Bone' warm neutrals; Dark mode uses 'Obsidian/Charcoal' deep neutrals."
+  },
+  "typography": {
+    "font_family": {
+      "heading": "Manrope, sans-serif",
+      "body": "Inter, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "scale": {
+      "h1": "text-5xl md:text-6xl font-bold tracking-tight",
+      "h2": "text-3xl md:text-4xl font-semibold tracking-tight",
+      "h3": "text-2xl font-semibold tracking-tight",
+      "body_lg": "text-lg leading-relaxed text-muted-foreground",
+      "body_base": "text-base leading-relaxed",
+      "caption": "text-sm font-medium text-muted-foreground uppercase tracking-wider"
+    },
+    "rules": [
+      "Headings (Manrope) must be tight (tracking-tight).",
+      "Numbers and Amounts must use 'font-variant-numeric: tabular-nums' for alignment.",
+      "Never use pure black text. Use Stone-900 (#1C1917) or Stone-800."
+    ]
+  },
+  "colors": {
+    "palette": {
+      "background": "#FAFAF9",
+      "surface": "#FFFFFF",
+      "surface_highlight": "#F5F5F4",
+      "text_primary": "#1C1917",
+      "text_secondary": "#78716C",
+      "border": "#E7E5E4",
+      "primary": "#1C1917",
+      "primary_foreground": "#FFFFFF",
+      "accent_income": "#10B981",
+      "accent_expense": "#F43F5E",
+      "accent_insight": "#6366F1",
+      "accent_warning": "#F59E0B"
+    },
+    "gradients": {
+      "subtle_glow": "radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.15) 0%, transparent 50%)",
+      "card_surface": "linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(250,250,249,1) 100%)"
+    },
+    "usage": {
+      "dashboard_bg": "bg-stone-50",
+      "card_bg": "bg-white",
+      "text_highlight": "text-stone-900",
+      "text_muted": "text-stone-500"
+    }
+  },
+  "layout": {
+    "grid_system": "Bento Grid (Mode A)",
+    "container": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+    "spacing": {
+      "section_gap": "py-12 md:py-20",
+      "card_padding": "p-6 md:p-8",
+      "grid_gap": "gap-6 md:gap-8"
+    },
+    "radius": {
+      "card": "rounded-3xl",
+      "button": "rounded-full",
+      "input": "rounded-xl"
+    },
+    "shadows": {
+      "card": "shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] transition-shadow duration-300",
+      "floating": "shadow-[0_16px_32px_rgba(0,0,0,0.12)]"
+    }
+  },
+  "components": {
+    "Button": {
+      "styles": "rounded-full font-medium transition-all active:scale-95",
+      "variants": {
+        "default": "bg-stone-900 text-white hover:bg-stone-800 shadow-md",
+        "outline": "border-2 border-stone-200 text-stone-900 hover:bg-stone-100 bg-transparent",
+        "ghost": "hover:bg-stone-100 text-stone-600"
+      }
+    },
+    "Card": {
+      "styles": "rounded-3xl border border-stone-100 bg-white/80 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-300",
+      "header": "p-6 pb-2",
+      "content": "p-6 pt-2"
+    },
+    "Input": {
+      "styles": "rounded-xl border-stone-200 bg-stone-50/50 focus:ring-2 focus:ring-stone-900/10 focus:border-stone-900 transition-all h-12"
+    },
+    "Charts": {
+      "library": "Recharts",
+      "style": "Clean, minimal. No grid lines (or very subtle dashed). Rounded bar ends. Custom tooltips with glassmorphism.",
+      "colors": ["#1C1917", "#10B981", "#F43F5E", "#6366F1", "#F59E0B"]
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": "backdrop-blur-xl bg-white/70 border border-white/20",
+    "noise": "opacity-20 pointer-events-none fixed inset-0 z-50 mix-blend-overlay",
+    "micro_interactions": {
+      "hover_lift": "hover:-translate-y-1 transition-transform duration-300 ease-out",
+      "click_press": "active:scale-95 transition-transform duration-100"
+    }
+  },
+  "assets": {
+    "icons": "Lucide React (Stroked, 1.5px or 2px stroke)",
+    "images": []
+  },
+  "universal_guidelines": [
+    "Do NOT use gradients for text.",
+    "Do NOT center align the dashboard container; use a wide layout with a max-width.",
+    "Use 'sonner' for toasts.",
+    "Always use 'Manrope' for Headings and 'Inter' for Body.",
+    "Cards must have 'rounded-3xl' for the Apple-like aesthetic.",
+    "Use generous padding (p-6, p-8) inside cards.",
+    "Interactive elements must have 'data-testid' attributes."
+  ],
+  "instructions_to_main_agent": [
+    "1. Setup Fonts: Import Manrope and Inter from Google Fonts in index.css.",
+    "2. Configure Tailwind: Add colors (Stone, Emerald, Rose, Indigo) and borderRadius (2xl, 3xl) to tailwind.config.js.",
+    "3. Build Layout: Create a 'DashboardLayout' component with a floating glass header and a max-w-7xl content area.",
+    "4. Dashboard Page: Implement the Bento Grid (Mode A).",
+    "   - Hero Card: Total Balance (col-span-full md:col-span-8).",
+    "   - Quick Actions: (col-span-4).",
+    "   - Chart Section: Spending Overview (col-span-full md:col-span-8 row-span-2).",
+    "   - Category Breakdown: Donut Chart (col-span-4 row-span-2).",
+    "   - Insights: Scrollable list or carousel (col-span-full).",
+    "5. Smart Insights: Use simple logic to generate 'fake' insights for the MVP (e.g., 'Spending is 10% lower than last month').",
+    "6. Upload Page: Simple drag-and-drop zone with clear typography.",
+    "7. Interactions: Add hover effects to all cards and buttons."
+  ]
+}
