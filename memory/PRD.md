@@ -68,6 +68,18 @@ Young professionals (20–35) who want better control over their money but don't
 - [x] **Transaction History Page**: Search, date/category filters, edit/delete modals
 - [x] **Weekly Budget Widget**: Progress bar showing spending vs $500 weekly budget
 
+### Mobile Widget PWA (v5) ✅
+- [x] **Dedicated Widget Page (/widget)**: Mobile-optimized standalone expense entry
+- [x] **PWA Manifest**: Install to home screen on iOS/Android
+- [x] **Gamification System**: 
+  - Points for each expense (+10-15 pts)
+  - Streak counter (consecutive days tracking)
+  - Milestone bonuses (first expense of day, every 5th expense)
+- [x] **Success Animation**: Confetti, category emoji, points earned
+- [x] **Today's Stats**: Live spending total and expense count in header
+- [x] **Quick Amounts**: 8 preset amounts ($5-$100)
+- [x] **Install Banner**: French prompt "Ajouter le widget sur votre téléphone"
+
 ## Smart Insights Logic (v2)
 1. **Month over Month**: Compares current vs last month spending
 2. **Subscription Count**: Identifies recurring subscriptions

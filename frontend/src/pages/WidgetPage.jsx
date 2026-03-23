@@ -229,7 +229,13 @@ const WidgetPage = () => {
   const handleSuccessContinue = () => {
     setShowSuccess(false);
     setSuccessData(null);
-    inputRef.current?.focus();
+    // Ensure form is reset
+    setAmount("");
+    setSelectedCategory(null);
+    // Focus input after a brief delay to ensure DOM is ready
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 100);
   };
 
   const goToFullApp = () => {
