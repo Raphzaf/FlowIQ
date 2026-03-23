@@ -9,13 +9,16 @@ import {
   Upload, 
   TrendingUp,
   Menu,
-  X
+  X,
+  History
 } from "lucide-react";
 
 // Pages
 import Dashboard from "./pages/Dashboard";
 import Insights from "./pages/Insights";
 import UploadPage from "./pages/Upload";
+import Transactions from "./pages/Transactions";
+import { QuickEntryFAB, QuickEntryDrawer } from "./pages/QuickEntry";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -43,6 +46,7 @@ const Navigation = () => {
   const navItems = [
     { path: "/", label: "Dashboard", icon: LayoutDashboard },
     { path: "/insights", label: "Insights", icon: Lightbulb },
+    { path: "/transactions", label: "History", icon: History },
     { path: "/upload", label: "Upload", icon: Upload },
   ];
 
@@ -149,6 +153,7 @@ function App() {
   const [cashflow, setCashflow] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [quickEntryOpen, setQuickEntryOpen] = useState(false);
 
   // Fetch all data
   const fetchData = async () => {
@@ -210,9 +215,18 @@ function App() {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/insights" element={<Insights />} />
+              <Route path="/transactions" element={<Transactions />} />
               <Route path="/upload" element={<UploadPage />} />
             </Routes>
           </main>
+          
+          {/* Quick Entry FAB and Drawer */}
+          <QuickEntryFAB onClick={() => setQuickEntryOpen(true)} />
+          <QuickEntryDrawer 
+            open={quickEntryOpen} 
+            onOpenChange={setQuickEntryOpen}
+            onSuccess={fetchData}
+          />
         </BrowserRouter>
         <Toaster 
           position="bottom-right" 
