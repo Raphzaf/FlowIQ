@@ -1,53 +1,196 @@
-import { useEffect } from "react";
+import { useEffect, useState, createContext, useContext } from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, NavLink, useLocation } from "react-router-dom";
 import axios from "axios";
+import { Toaster, toast } from "sonner";
+import { 
+  LayoutDashboard, 
+  Lightbulb, 
+  Upload, 
+  TrendingUp,
+  Menu,
+  X
+} from "lucide-react";
+
+// Pages
+import Dashboard from "./pages/Dashboard";
+import Insights from "./pages/Insights";
+import UploadPage from "./pages/Upload";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
+// Create API context
+export const ApiContext = createContext();
 
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
+export const useApi = () => useContext(ApiContext);
+
+// Navigation component
+const Navigation = () => {
+  const location = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  
+  const navItems = [
+    { path: "/", label: "Dashboard", icon: LayoutDashboard },
+    { path: "/insights", label: "Insights", icon: Lightbulb },
+    { path: "/upload", label: "Upload", icon: Upload },
+  ];
 
   return (
-    <div>
-      <header className="App-header">
-        <a
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
-    </div>
+    <header className="sticky top-0 z-50 w-full backdrop-blur-xl bg-white/80 border-b border-stone-200/50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex h-16 items-center justify-between">
+          {/* Logo */}
+          <NavLink to="/" className="flex items-center gap-2 group" data-testid="logo-link">
+            <div className="w-9 h-9 rounded-xl bg-stone-900 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <TrendingUp className="w-5 h-5 text-white" />
+            </div>
+            <span className="font-heading font-bold text-xl text-stone-900">FlowIQ</span>
+          </NavLink>
+
+          {/* Desktop Navigation */}
+          <nav className="hidden md:flex items-center gap-1" data-testid="desktop-nav">
+            {navItems.map((item) => {
+              const isActive = location.pathname === item.path;
+              const Icon = item.icon;
+              return (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  data-testid={`nav-${item.label.toLowerCase()}`}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                    isActive
+                      ? "bg-stone-900 text-white"
+                      : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {item.label}
+                </NavLink>
+              );
+            })}
+          </nav>
+
+          {/* Mobile menu button */}
+          <button
+            className="md:hidden p-2 rounded-lg hover:bg-stone-100 transition-colors"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            data-testid="mobile-menu-btn"
+          >
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
+
+        {/* Mobile Navigation */}
+        {mobileMenuOpen && (
+          <nav className="md:hidden py-4 border-t border-stone-200" data-testid="mobile-nav">
+            {navItems.map((item) => {
+              const isActive = location.pathname === item.path;
+              const Icon = item.icon;
+              return (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  onClick={() => setMobileMenuOpen(false)}
+                  data-testid={`mobile-nav-${item.label.toLowerCase()}`}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                    isActive
+                      ? "bg-stone-900 text-white"
+                      : "text-stone-600 hover:bg-stone-100"
+                  }`}
+                >
+                  <Icon className="w-5 h-5" />
+                  {item.label}
+                </NavLink>
+              );
+            })}
+          </nav>
+        )}
+      </div>
+    </header>
   );
 };
 
 function App() {
+  const [dashboardData, setDashboardData] = useState(null);
+  const [insights, setInsights] = useState([]);
+  const [cashflow, setCashflow] = useState(null);
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch all data
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      
+      // Check if we need to seed demo data
+      const transRes = await axios.get(`${API}/transactions`);
+      
+      if (transRes.data.length === 0) {
+        // Seed demo data
+        await axios.post(`${API}/seed-demo-data`);
+        toast.success("Demo data loaded! Explore your financial dashboard.");
+      }
+      
+      // Fetch all data in parallel
+      const [dashRes, insightsRes, cashflowRes, newTransRes] = await Promise.all([
+        axios.get(`${API}/dashboard`),
+        axios.get(`${API}/insights`),
+        axios.get(`${API}/cashflow-prediction`),
+        axios.get(`${API}/transactions`),
+      ]);
+      
+      setDashboardData(dashRes.data);
+      setInsights(insightsRes.data);
+      setCashflow(cashflowRes.data);
+      setTransactions(newTransRes.data);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      toast.error("Failed to load data. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const apiValue = {
+    API,
+    dashboardData,
+    insights,
+    cashflow,
+    transactions,
+    loading,
+    refreshData: fetchData,
+  };
+
   return (
-    <div className="App">
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </div>
+    <ApiContext.Provider value={apiValue}>
+      <div className="min-h-screen bg-stone-50">
+        <BrowserRouter>
+          <Navigation />
+          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/insights" element={<Insights />} />
+              <Route path="/upload" element={<UploadPage />} />
+            </Routes>
+          </main>
+        </BrowserRouter>
+        <Toaster 
+          position="bottom-right" 
+          toastOptions={{
+            style: {
+              background: '#1C1917',
+              color: '#fff',
+              borderRadius: '12px',
+            },
+          }}
+        />
+      </div>
+    </ApiContext.Provider>
   );
 }
 

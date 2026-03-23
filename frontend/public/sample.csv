@@ -1,0 +1,16 @@
+date,amount,category,merchant,type
+2024-01-15,-45.00,Food & Dining,Uber Eats,expense
+2024-01-14,-12.50,Transport,Uber,expense
+2024-01-13,-29.99,Subscriptions,Netflix,expense
+2024-01-12,-85.00,Shopping,Amazon,expense
+2024-01-11,-15.00,Entertainment,Steam,expense
+2024-01-10,-120.00,Bills & Utilities,Electric Company,expense
+2024-01-09,-35.00,Health,CVS Pharmacy,expense
+2024-01-08,-22.00,Food & Dining,Starbucks,expense
+2024-01-07,-55.00,Transport,Shell Gas,expense
+2024-01-06,-199.00,Shopping,Best Buy,expense
+2024-01-05,-9.99,Subscriptions,Spotify,expense
+2024-01-04,-42.00,Food & Dining,Chipotle,expense
+2024-01-03,-18.00,Entertainment,AMC Theaters,expense
+2024-01-02,-75.00,Health,Gym Membership,expense
+2024-01-01,5000.00,Income,Salary Deposit,income
