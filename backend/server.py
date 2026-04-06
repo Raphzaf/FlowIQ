@@ -40,6 +40,15 @@ def _jwt_role(token: str) -> Optional[str]:
     except Exception:
         return None
 
+
+def _is_valid_supabase_server_key(key: str) -> bool:
+    # New Supabase server keys use the sb_secret_ prefix and are not JWTs.
+    if key.startswith("sb_secret_"):
+        return True
+
+    # Legacy server keys are JWTs with role=service_role.
+    return _jwt_role(key) == "service_role"
+
 # Storage connection (Supabase preferred, MongoDB fallback)
 SUPABASE_URL = _env("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = _env("SUPABASE_SERVICE_ROLE_KEY")
@@ -51,10 +60,10 @@ client = None
 db = None
 
 if use_supabase:
-    if _jwt_role(SUPABASE_SERVICE_ROLE_KEY) != "service_role":
+    if not _is_valid_supabase_server_key(SUPABASE_SERVICE_ROLE_KEY):
         raise RuntimeError(
-            "SUPABASE_SERVICE_ROLE_KEY is not a service_role JWT. "
-            "Use the service_role key from Supabase project API settings."
+            "SUPABASE_SERVICE_ROLE_KEY is invalid for server use. "
+            "Use a Supabase service_role JWT or an sb_secret_* server key."
         )
     supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 else:
