@@ -25,7 +25,20 @@ load_dotenv(ROOT_DIR / '.env')
 
 def _env(name: str) -> Optional[str]:
     value = os.environ.get(name)
-    return value.strip() if value else None
+    if not value:
+        return None
+
+    value = value.strip()
+
+    # Allow values copied with quotes from dashboards/docs.
+    if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+        value = value[1:-1].strip()
+
+    # Allow accidental Authorization-style prefix.
+    if value.lower().startswith("bearer "):
+        value = value[7:].strip()
+
+    return value or None
 
 
 def _jwt_role(token: str) -> Optional[str]:
@@ -43,7 +56,7 @@ def _jwt_role(token: str) -> Optional[str]:
 
 def _is_valid_supabase_server_key(key: str) -> bool:
     # New Supabase server keys use the sb_secret_ prefix and are not JWTs.
-    if key.startswith("sb_secret_"):
+    if key.startswith("sb_secret_") or key.startswith("sb_secret-"):
         return True
 
     # Legacy server keys are JWTs with role=service_role.
