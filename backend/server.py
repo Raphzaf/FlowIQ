@@ -6,6 +6,8 @@ from supabase import create_client
 import os
 import logging
 from pathlib import Path
+import base64
+import json
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Dict, Any
 import uuid
@@ -25,9 +27,22 @@ def _env(name: str) -> Optional[str]:
     value = os.environ.get(name)
     return value.strip() if value else None
 
+
+def _jwt_role(token: str) -> Optional[str]:
+    try:
+        parts = token.split(".")
+        if len(parts) != 3:
+            return None
+        payload_b64 = parts[1]
+        padding = "=" * (-len(payload_b64) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(payload_b64 + padding).decode("utf-8"))
+        return payload.get("role")
+    except Exception:
+        return None
+
 # Storage connection (Supabase preferred, MongoDB fallback)
 SUPABASE_URL = _env("SUPABASE_URL")
-SUPABASE_SERVICE_ROLE_KEY = _env("SUPABASE_SERVICE_ROLE_KEY") or _env("SUPABASE_KEY")
+SUPABASE_SERVICE_ROLE_KEY = _env("SUPABASE_SERVICE_ROLE_KEY")
 
 use_supabase = bool(SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)
 supabase = None
@@ -36,6 +51,11 @@ client = None
 db = None
 
 if use_supabase:
+    if _jwt_role(SUPABASE_SERVICE_ROLE_KEY) != "service_role":
+        raise RuntimeError(
+            "SUPABASE_SERVICE_ROLE_KEY is not a service_role JWT. "
+            "Use the service_role key from Supabase project API settings."
+        )
     supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 else:
     mongo_url = _env("MONGO_URL")
@@ -44,7 +64,6 @@ else:
     if not mongo_url or not db_name:
         raise RuntimeError(
             "Missing database configuration. Set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY "
-            "(or SUPABASE_KEY) "
             "or MONGO_URL + DB_NAME."
         )
 
