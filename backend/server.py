@@ -2,6 +2,7 @@ from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from supabase import create_client
 import os
 import logging
 from pathlib import Path
@@ -19,16 +20,94 @@ from insights_engine import generate_insights
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+# Storage connection (Supabase preferred, MongoDB fallback)
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+
+use_supabase = bool(SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)
+supabase = None
+
+client = None
+db = None
+
+if use_supabase:
+    supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+else:
+    mongo_url = os.environ.get("MONGO_URL")
+    db_name = os.environ.get("DB_NAME")
+
+    if not mongo_url or not db_name:
+        raise RuntimeError(
+            "Missing database configuration. Set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY "
+            "or MONGO_URL + DB_NAME."
+        )
+
+    client = AsyncIOMotorClient(mongo_url)
+    db = client[db_name]
 
 # Create the main app
 app = FastAPI()
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
+
+
+async def db_get_transactions(limit: int = 1000) -> List[Dict[str, Any]]:
+    if use_supabase:
+        response = (
+            supabase.table("transactions")
+            .select("id,date,amount,category,merchant,type")
+            .order("date", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return response.data or []
+
+    return await db.transactions.find({}, {"_id": 0}).to_list(limit)
+
+
+async def db_insert_transaction(transaction: Dict[str, Any]) -> None:
+    if use_supabase:
+        supabase.table("transactions").insert(transaction).execute()
+        return
+
+    await db.transactions.insert_one(transaction)
+
+
+async def db_insert_transactions(transactions: List[Dict[str, Any]]) -> None:
+    if not transactions:
+        return
+
+    if use_supabase:
+        supabase.table("transactions").insert(transactions).execute()
+        return
+
+    await db.transactions.insert_many(transactions)
+
+
+async def db_delete_transaction(transaction_id: str) -> int:
+    if use_supabase:
+        response = supabase.table("transactions").delete().eq("id", transaction_id).execute()
+        return len(response.data or [])
+
+    result = await db.transactions.delete_one({"id": transaction_id})
+    return result.deleted_count
+
+
+async def db_count_transactions() -> int:
+    if use_supabase:
+        response = supabase.table("transactions").select("id", count="exact").limit(1).execute()
+        return response.count or 0
+
+    return await db.transactions.count_documents({})
+
+
+async def db_clear_transactions() -> None:
+    if use_supabase:
+        supabase.table("transactions").delete().neq("id", "") .execute()
+        return
+
+    await db.transactions.delete_many({})
 
 # Define Models
 class Transaction(BaseModel):
@@ -134,7 +213,7 @@ async def root():
 
 @api_router.get("/transactions", response_model=List[Transaction])
 async def get_transactions():
-    transactions = await db.transactions.find({}, {"_id": 0}).to_list(1000)
+    transactions = await db_get_transactions(1000)
     return transactions
 
 @api_router.post("/transactions", response_model=Transaction)
@@ -142,36 +221,36 @@ async def create_transaction(transaction: TransactionCreate):
     trans_dict = transaction.model_dump()
     trans_obj = Transaction(**trans_dict)
     doc = trans_obj.model_dump()
-    await db.transactions.insert_one(doc)
+    await db_insert_transaction(doc)
     return trans_obj
 
 @api_router.delete("/transactions/{transaction_id}")
 async def delete_transaction(transaction_id: str):
-    result = await db.transactions.delete_one({"id": transaction_id})
-    if result.deleted_count == 0:
+    deleted_count = await db_delete_transaction(transaction_id)
+    if deleted_count == 0:
         raise HTTPException(status_code=404, detail="Transaction not found")
     return {"message": "Transaction deleted"}
 
 @api_router.post("/seed-demo-data")
 async def seed_demo_data():
     """Seed the database with demo data"""
-    count = await db.transactions.count_documents({})
+    count = await db_count_transactions()
     if count > 0:
         return {"message": "Demo data already exists", "count": count}
     
     demo_data = generate_demo_data()
-    await db.transactions.insert_many(demo_data)
+    await db_insert_transactions(demo_data)
     return {"message": "Demo data seeded successfully", "count": len(demo_data)}
 
 @api_router.delete("/clear-data")
 async def clear_data():
     """Clear all transaction data"""
-    await db.transactions.delete_many({})
+    await db_clear_transactions()
     return {"message": "All data cleared"}
 
 @api_router.get("/dashboard", response_model=DashboardSummary)
 async def get_dashboard():
-    transactions = await db.transactions.find({}, {"_id": 0}).to_list(1000)
+    transactions = await db_get_transactions(1000)
     
     if not transactions:
         return DashboardSummary(
@@ -230,7 +309,7 @@ async def get_dashboard():
 @api_router.get("/insights-advanced")
 async def get_advanced_insights():
     """Get advanced AI-powered insights with personality and health score"""
-    transactions = await db.transactions.find({}, {"_id": 0}).to_list(1000)
+    transactions = await db_get_transactions(1000)
     
     if not transactions:
         return {
@@ -288,7 +367,7 @@ async def get_insights():
 
 @api_router.get("/cashflow-prediction", response_model=CashflowPrediction)
 async def get_cashflow_prediction():
-    transactions = await db.transactions.find({}, {"_id": 0}).to_list(1000)
+    transactions = await db_get_transactions(1000)
     
     if not transactions:
         return CashflowPrediction(
@@ -383,7 +462,7 @@ async def upload_csv(file: UploadFile = File(...)):
         if not transactions:
             raise HTTPException(status_code=400, detail="No valid transactions found in CSV")
         
-        await db.transactions.insert_many(transactions)
+        await db_insert_transactions(transactions)
         
         return {
             "message": f"Successfully imported {len(transactions)} transactions",
@@ -413,4 +492,5 @@ logger = logging.getLogger(__name__)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    client.close()
+    if client is not None:
+        client.close()
