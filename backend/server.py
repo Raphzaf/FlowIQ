@@ -28,17 +28,15 @@ def _env(name: str) -> Optional[str]:
 # Storage connection (Supabase preferred, MongoDB fallback)
 SUPABASE_URL = _env("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = _env("SUPABASE_SERVICE_ROLE_KEY") or _env("SUPABASE_KEY")
-SUPABASE_ANON_KEY = _env("SUPABASE_ANON_KEY")
-SUPABASE_API_KEY = SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY
 
-use_supabase = bool(SUPABASE_URL and SUPABASE_API_KEY)
+use_supabase = bool(SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)
 supabase = None
 
 client = None
 db = None
 
 if use_supabase:
-    supabase = create_client(SUPABASE_URL, SUPABASE_API_KEY)
+    supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 else:
     mongo_url = _env("MONGO_URL")
     db_name = _env("DB_NAME")
@@ -46,7 +44,7 @@ else:
     if not mongo_url or not db_name:
         raise RuntimeError(
             "Missing database configuration. Set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY "
-            "(or SUPABASE_KEY / SUPABASE_ANON_KEY) "
+            "(or SUPABASE_KEY) "
             "or MONGO_URL + DB_NAME."
         )
 
