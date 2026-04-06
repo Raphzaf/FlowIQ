@@ -1,0 +1,7 @@
+{
+  "name": "flowiq",
+  "private": true,
+  "scripts": {
+    "vercel-build": "cd frontend && npm install && CI=false npm run build"
+  }
+}
