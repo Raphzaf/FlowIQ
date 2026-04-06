@@ -91,12 +91,51 @@ main {
 
 /* Responsive typography adjustments */
 @media (max-width: 640px) {
+  html {
+    font-size: 15px;
+  }
+
+  body {
+    line-height: 1.45;
+  }
+
   .font-heading {
     letter-spacing: -0.01em;
   }
+
+  h1 {
+    font-size: 1.9rem;
+    line-height: 1.15;
+  }
+
+  h2 {
+    font-size: 1.45rem;
+    line-height: 1.2;
+  }
+
+  h3 {
+    font-size: 1.1rem;
+  }
+
+  .card-premium {
+    border-radius: 1.1rem;
+  }
+
+  .card-premium > div {
+    padding: 1rem !important;
+  }
+
+  .insight-card {
+    padding: 1rem;
+    border-radius: 1rem;
+  }
+
+  .metric-label {
+    font-size: 0.72rem;
+  }
   
   .metric-value {
-    font-size: 2.5rem;
+    font-size: 2.2rem;
   }
 }
 

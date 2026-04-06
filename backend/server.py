@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException
+from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Header
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -15,6 +15,7 @@ from datetime import datetime, timezone, timedelta
 import csv
 import io
 import random
+import calendar
 
 # Import insights engine
 from insights_engine import generate_insights
@@ -98,19 +99,96 @@ app = FastAPI()
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
+DEFAULT_USER_ID = "demo-user"
 
-async def db_get_transactions(limit: int = 1000) -> List[Dict[str, Any]]:
+
+async def _resolve_user_id(x_user_id: Optional[str], authorization: Optional[str]) -> str:
+    # In Supabase mode, trust the authenticated JWT user, not a client-provided user id.
     if use_supabase:
-        response = (
+        if not authorization:
+            raise HTTPException(status_code=401, detail="Missing Authorization header")
+
+        parts = authorization.strip().split(" ", 1)
+        if len(parts) != 2 or parts[0].lower() != "bearer" or not parts[1].strip():
+            raise HTTPException(status_code=401, detail="Invalid Authorization header")
+
+        token = parts[1].strip()
+        try:
+            auth_response = supabase.auth.get_user(token)
+            auth_user = getattr(auth_response, "user", None)
+            if auth_user is None and isinstance(auth_response, dict):
+                auth_user = auth_response.get("user")
+
+            user_id = getattr(auth_user, "id", None)
+            if user_id is None and isinstance(auth_user, dict):
+                user_id = auth_user.get("id")
+
+            if not user_id:
+                raise HTTPException(status_code=401, detail="Invalid auth token")
+            return str(user_id)
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=401, detail="Unable to validate auth token")
+
+    user_id = (x_user_id or DEFAULT_USER_ID).strip()
+    if not user_id:
+        return DEFAULT_USER_ID
+    if len(user_id) > 128:
+        raise HTTPException(status_code=400, detail="Invalid user id")
+    return user_id
+
+
+def _is_default_user(user_id: str) -> bool:
+    return user_id == DEFAULT_USER_ID
+
+
+def _default_profile(user_id: str) -> Dict[str, Any]:
+    now_iso = datetime.now(timezone.utc).isoformat()
+    label = user_id.replace("-", " ").replace("_", " ").title()
+    return {
+        "user_id": user_id,
+        "display_name": label if label else "FlowIQ User",
+        "currency": "USD",
+        "monthly_budget": None,
+        "monthly_income": None,
+        "monthly_income_day": 1,
+        "monthly_rent": None,
+        "monthly_rent_day": 1,
+        "monthly_subscriptions": None,
+        "monthly_subscriptions_day": 1,
+        "monthly_other_fixed_expenses": None,
+        "monthly_other_fixed_expenses_day": 1,
+        "timezone": "UTC",
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+
+
+async def db_get_transactions(user_id: str, limit: int = 1000) -> List[Dict[str, Any]]:
+    if use_supabase:
+        query = (
             supabase.table("transactions")
-            .select("id,date,amount,category,merchant,type")
+            .select("id,date,amount,category,merchant,type,user_id")
             .order("date", desc=True)
             .limit(limit)
-            .execute()
         )
+
+        if _is_default_user(user_id):
+            query = query.or_(f"user_id.eq.{user_id},user_id.is.null")
+        else:
+            query = query.eq("user_id", user_id)
+
+        response = query.execute()
         return response.data or []
 
-    return await db.transactions.find({}, {"_id": 0}).to_list(limit)
+    mongo_query: Dict[str, Any]
+    if _is_default_user(user_id):
+        mongo_query = {"$or": [{"user_id": user_id}, {"user_id": {"$exists": False}}]}
+    else:
+        mongo_query = {"user_id": user_id}
+
+    return await db.transactions.find(mongo_query, {"_id": 0}).to_list(limit)
 
 
 async def db_insert_transaction(transaction: Dict[str, Any]) -> None:
@@ -132,13 +210,44 @@ async def db_insert_transactions(transactions: List[Dict[str, Any]]) -> None:
     await db.transactions.insert_many(transactions)
 
 
-async def db_delete_transaction(transaction_id: str) -> int:
+async def db_delete_transaction(transaction_id: str, user_id: str) -> int:
     if use_supabase:
-        response = supabase.table("transactions").delete().eq("id", transaction_id).execute()
+        query = supabase.table("transactions").delete().eq("id", transaction_id)
+        if _is_default_user(user_id):
+            query = query.or_(f"user_id.eq.{user_id},user_id.is.null")
+        else:
+            query = query.eq("user_id", user_id)
+        response = query.execute()
         return len(response.data or [])
 
-    result = await db.transactions.delete_one({"id": transaction_id})
+    if _is_default_user(user_id):
+        result = await db.transactions.delete_one(
+            {"id": transaction_id, "$or": [{"user_id": user_id}, {"user_id": {"$exists": False}}]}
+        )
+    else:
+        result = await db.transactions.delete_one({"id": transaction_id, "user_id": user_id})
     return result.deleted_count
+
+
+async def db_update_transaction(transaction_id: str, user_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if use_supabase:
+        query = supabase.table("transactions").update(updates).eq("id", transaction_id)
+        if _is_default_user(user_id):
+            query = query.or_(f"user_id.eq.{user_id},user_id.is.null")
+        else:
+            query = query.eq("user_id", user_id)
+
+        response = query.execute()
+        rows = response.data or []
+        return rows[0] if rows else None
+
+    if _is_default_user(user_id):
+        filter_query = {"id": transaction_id, "$or": [{"user_id": user_id}, {"user_id": {"$exists": False}}]}
+    else:
+        filter_query = {"id": transaction_id, "user_id": user_id}
+
+    await db.transactions.update_one(filter_query, {"$set": updates})
+    return await db.transactions.find_one(filter_query, {"_id": 0})
 
 
 async def db_count_transactions() -> int:
@@ -149,12 +258,61 @@ async def db_count_transactions() -> int:
     return await db.transactions.count_documents({})
 
 
-async def db_clear_transactions() -> None:
+async def db_clear_transactions(user_id: str) -> None:
     if use_supabase:
-        supabase.table("transactions").delete().neq("id", "") .execute()
+        query = supabase.table("transactions").delete().neq("id", "")
+        if _is_default_user(user_id):
+            query = query.or_(f"user_id.eq.{user_id},user_id.is.null")
+        else:
+            query = query.eq("user_id", user_id)
+        query.execute()
         return
 
-    await db.transactions.delete_many({})
+    if _is_default_user(user_id):
+        await db.transactions.delete_many({"$or": [{"user_id": user_id}, {"user_id": {"$exists": False}}]})
+        return
+
+    await db.transactions.delete_many({"user_id": user_id})
+
+
+async def db_get_profile(user_id: str) -> Optional[Dict[str, Any]]:
+    if use_supabase:
+        response = (
+            supabase.table("user_profiles")
+            .select("user_id,display_name,currency,monthly_budget,monthly_income,monthly_income_day,monthly_rent,monthly_rent_day,monthly_subscriptions,monthly_subscriptions_day,monthly_other_fixed_expenses,monthly_other_fixed_expenses_day,timezone,created_at,updated_at")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        rows = response.data or []
+        return rows[0] if rows else None
+
+    return await db.user_profiles.find_one({"user_id": user_id}, {"_id": 0})
+
+
+async def db_upsert_profile(profile: Dict[str, Any]) -> Dict[str, Any]:
+    if use_supabase:
+        response = (
+            supabase.table("user_profiles")
+            .upsert(profile, on_conflict="user_id")
+            .execute()
+        )
+        rows = response.data or []
+        if rows:
+            return rows[0]
+
+        selected = await db_get_profile(profile["user_id"])
+        if selected:
+            return selected
+        return profile
+
+    await db.user_profiles.update_one(
+        {"user_id": profile["user_id"]},
+        {"$set": profile},
+        upsert=True,
+    )
+    saved = await db.user_profiles.find_one({"user_id": profile["user_id"]}, {"_id": 0})
+    return saved or profile
 
 # Define Models
 class Transaction(BaseModel):
@@ -165,6 +323,7 @@ class Transaction(BaseModel):
     category: str
     merchant: str
     type: str = "expense"
+    user_id: Optional[str] = None
 
 class TransactionCreate(BaseModel):
     date: str
@@ -172,6 +331,54 @@ class TransactionCreate(BaseModel):
     category: str
     merchant: str
     type: str = "expense"
+
+
+class TransactionUpdate(BaseModel):
+    date: Optional[str] = None
+    amount: Optional[float] = None
+    category: Optional[str] = None
+    merchant: Optional[str] = None
+    type: Optional[str] = None
+
+
+class UserProfile(BaseModel):
+    user_id: str
+    display_name: str
+    currency: str = "USD"
+    monthly_budget: Optional[float] = None
+    monthly_income: Optional[float] = None
+    monthly_income_day: int = 1
+    monthly_rent: Optional[float] = None
+    monthly_rent_day: int = 1
+    monthly_subscriptions: Optional[float] = None
+    monthly_subscriptions_day: int = 1
+    monthly_other_fixed_expenses: Optional[float] = None
+    monthly_other_fixed_expenses_day: int = 1
+    timezone: str = "UTC"
+    created_at: str
+    updated_at: str
+
+
+class UserProfileUpdate(BaseModel):
+    display_name: Optional[str] = None
+    currency: Optional[str] = None
+    monthly_budget: Optional[float] = None
+    monthly_income: Optional[float] = None
+    monthly_income_day: Optional[int] = None
+    monthly_rent: Optional[float] = None
+    monthly_rent_day: Optional[int] = None
+    monthly_subscriptions: Optional[float] = None
+    monthly_subscriptions_day: Optional[int] = None
+    monthly_other_fixed_expenses: Optional[float] = None
+    monthly_other_fixed_expenses_day: Optional[int] = None
+    timezone: Optional[str] = None
+
+
+class MonthlyPlanApplyResult(BaseModel):
+    month: str
+    created_count: int
+    skipped_count: int
+    created_transactions: List[Transaction]
 
 class DashboardSummary(BaseModel):
     total_balance: float
@@ -254,50 +461,296 @@ def generate_demo_data():
     
     return transactions
 
+
+def _attach_user_id(transactions: List[Dict[str, Any]], user_id: str) -> List[Dict[str, Any]]:
+    for tx in transactions:
+        tx["user_id"] = user_id
+    return transactions
+
 @api_router.get("/")
 async def root():
     return {"message": "FlowIQ API - Your Smart CFO"}
 
+@api_router.get("/profile", response_model=UserProfile)
+async def get_profile(
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    profile = await db_get_profile(user_id)
+    if not profile:
+        profile = await db_upsert_profile(_default_profile(user_id))
+    return UserProfile(**profile)
+
+
+@api_router.put("/profile", response_model=UserProfile)
+async def update_profile(
+    payload: UserProfileUpdate,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    current = await db_get_profile(user_id)
+    if not current:
+        current = _default_profile(user_id)
+
+    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+
+    day_fields = [
+        "monthly_income_day",
+        "monthly_rent_day",
+        "monthly_subscriptions_day",
+        "monthly_other_fixed_expenses_day",
+    ]
+    for field in day_fields:
+        if field in updates:
+            day_value = int(updates[field])
+            if day_value < 1 or day_value > 31:
+                raise HTTPException(status_code=400, detail=f"{field} must be between 1 and 31")
+
+    merged = {
+        **current,
+        **updates,
+        "user_id": user_id,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if not merged.get("created_at"):
+        merged["created_at"] = datetime.now(timezone.utc).isoformat()
+
+    saved = await db_upsert_profile(merged)
+    return UserProfile(**saved)
+
+
+@api_router.post("/monthly-plan/apply", response_model=MonthlyPlanApplyResult)
+async def apply_monthly_plan(
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    profile = await db_get_profile(user_id)
+    if not profile:
+        profile = await db_upsert_profile(_default_profile(user_id))
+
+    today = datetime.now(timezone.utc)
+    month_prefix = today.strftime("%Y-%m")
+    _, days_in_month = calendar.monthrange(today.year, today.month)
+
+    def _monthly_date(day_value: Any) -> str:
+        try:
+            day_int = int(day_value)
+        except (TypeError, ValueError):
+            day_int = 1
+        if day_int < 1:
+            day_int = 1
+        if day_int > 31:
+            day_int = 31
+        day = min(day_int, days_in_month)
+        return datetime(today.year, today.month, day, tzinfo=timezone.utc).strftime("%Y-%m-%d")
+
+    def _to_positive(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        if parsed <= 0:
+            return None
+        return round(parsed, 2)
+
+    monthly_income = _to_positive(profile.get("monthly_income"))
+    monthly_income_day = profile.get("monthly_income_day", 1)
+    monthly_rent = _to_positive(profile.get("monthly_rent"))
+    monthly_rent_day = profile.get("monthly_rent_day", 1)
+    monthly_subscriptions = _to_positive(profile.get("monthly_subscriptions"))
+    monthly_subscriptions_day = profile.get("monthly_subscriptions_day", 1)
+    monthly_other_fixed_expenses = _to_positive(profile.get("monthly_other_fixed_expenses"))
+    monthly_other_fixed_expenses_day = profile.get("monthly_other_fixed_expenses_day", 1)
+
+    monthly_plan = []
+    if monthly_income is not None:
+        monthly_plan.append(
+            {
+                "date": _monthly_date(monthly_income_day),
+                "amount": monthly_income,
+                "category": "Income",
+                "merchant": "Salaire mensuel",
+                "type": "income",
+                "user_id": user_id,
+            }
+        )
+    if monthly_rent is not None:
+        monthly_plan.append(
+            {
+                "date": _monthly_date(monthly_rent_day),
+                "amount": monthly_rent,
+                "category": "Bills & Utilities",
+                "merchant": "Loyer appartement",
+                "type": "expense",
+                "user_id": user_id,
+            }
+        )
+    if monthly_subscriptions is not None:
+        monthly_plan.append(
+            {
+                "date": _monthly_date(monthly_subscriptions_day),
+                "amount": monthly_subscriptions,
+                "category": "Subscriptions",
+                "merchant": "Abonnements mensuels",
+                "type": "expense",
+                "user_id": user_id,
+            }
+        )
+    if monthly_other_fixed_expenses is not None:
+        monthly_plan.append(
+            {
+                "date": _monthly_date(monthly_other_fixed_expenses_day),
+                "amount": monthly_other_fixed_expenses,
+                "category": "Bills & Utilities",
+                "merchant": "Charges fixes mensuelles",
+                "type": "expense",
+                "user_id": user_id,
+            }
+        )
+
+    if not monthly_plan:
+        return MonthlyPlanApplyResult(
+            month=month_prefix,
+            created_count=0,
+            skipped_count=0,
+            created_transactions=[],
+        )
+
+    existing_transactions = await db_get_transactions(user_id=user_id, limit=2000)
+    existing_keys = set()
+    for tx in existing_transactions:
+        tx_date = str(tx.get("date", ""))
+        if not tx_date.startswith(month_prefix):
+            continue
+        key = (
+            tx_date,
+            tx.get("type", "expense"),
+            tx.get("category", ""),
+            tx.get("merchant", ""),
+            round(float(tx.get("amount", 0)), 2),
+        )
+        existing_keys.add(key)
+
+    to_create: List[Transaction] = []
+    skipped_count = 0
+    for item in monthly_plan:
+        key = (
+            item["date"],
+            item["type"],
+            item["category"],
+            item["merchant"],
+            round(float(item["amount"]), 2),
+        )
+        if key in existing_keys:
+            skipped_count += 1
+            continue
+
+        tx = Transaction(**{**item, "id": str(uuid.uuid4())})
+        to_create.append(tx)
+
+    if to_create:
+        await db_insert_transactions([tx.model_dump() for tx in to_create])
+
+    return MonthlyPlanApplyResult(
+        month=month_prefix,
+        created_count=len(to_create),
+        skipped_count=skipped_count,
+        created_transactions=to_create,
+    )
+
+
 @api_router.get("/transactions", response_model=List[Transaction])
-async def get_transactions():
-    transactions = await db_get_transactions(1000)
+async def get_transactions(
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    transactions = await db_get_transactions(user_id=user_id, limit=1000)
     return transactions
 
 @api_router.post("/transactions", response_model=Transaction)
-async def create_transaction(transaction: TransactionCreate):
+async def create_transaction(
+    transaction: TransactionCreate,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    user_id = await _resolve_user_id(x_user_id, authorization)
     trans_dict = transaction.model_dump()
+    trans_dict["user_id"] = user_id
     trans_obj = Transaction(**trans_dict)
     doc = trans_obj.model_dump()
     await db_insert_transaction(doc)
     return trans_obj
 
 @api_router.delete("/transactions/{transaction_id}")
-async def delete_transaction(transaction_id: str):
-    deleted_count = await db_delete_transaction(transaction_id)
+async def delete_transaction(
+    transaction_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    deleted_count = await db_delete_transaction(transaction_id, user_id)
     if deleted_count == 0:
         raise HTTPException(status_code=404, detail="Transaction not found")
     return {"message": "Transaction deleted"}
 
+
+@api_router.put("/transactions/{transaction_id}", response_model=Transaction)
+async def update_transaction(
+    transaction_id: str,
+    payload: TransactionUpdate,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    updated = await db_update_transaction(transaction_id, user_id, updates)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    return Transaction(**updated)
+
 @api_router.post("/seed-demo-data")
-async def seed_demo_data():
+async def seed_demo_data(
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
     """Seed the database with demo data"""
-    count = await db_count_transactions()
-    if count > 0:
-        return {"message": "Demo data already exists", "count": count}
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    existing_transactions = await db_get_transactions(user_id=user_id, limit=1)
+    if existing_transactions:
+        return {"message": "Demo data already exists", "count": len(existing_transactions)}
     
     demo_data = generate_demo_data()
+    demo_data = _attach_user_id(demo_data, user_id)
     await db_insert_transactions(demo_data)
     return {"message": "Demo data seeded successfully", "count": len(demo_data)}
 
 @api_router.delete("/clear-data")
-async def clear_data():
+async def clear_data(
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
     """Clear all transaction data"""
-    await db_clear_transactions()
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    await db_clear_transactions(user_id)
     return {"message": "All data cleared"}
 
 @api_router.get("/dashboard", response_model=DashboardSummary)
-async def get_dashboard():
-    transactions = await db_get_transactions(1000)
+async def get_dashboard(
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    transactions = await db_get_transactions(user_id=user_id, limit=1000)
     
     if not transactions:
         return DashboardSummary(
@@ -354,9 +807,13 @@ async def get_dashboard():
     )
 
 @api_router.get("/insights-advanced")
-async def get_advanced_insights():
+async def get_advanced_insights(
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
     """Get advanced AI-powered insights with personality and health score"""
-    transactions = await db_get_transactions(1000)
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    transactions = await db_get_transactions(user_id=user_id, limit=1000)
     
     if not transactions:
         return {
@@ -395,9 +852,12 @@ async def get_advanced_insights():
     return result
 
 @api_router.get("/insights")
-async def get_insights():
+async def get_insights(
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
     """Legacy insights endpoint - returns simplified format"""
-    advanced = await get_advanced_insights()
+    advanced = await get_advanced_insights(x_user_id=x_user_id, authorization=authorization)
     
     # Convert to simple format for backwards compatibility
     simple_insights = []
@@ -413,8 +873,12 @@ async def get_insights():
     return simple_insights[:5]
 
 @api_router.get("/cashflow-prediction", response_model=CashflowPrediction)
-async def get_cashflow_prediction():
-    transactions = await db_get_transactions(1000)
+async def get_cashflow_prediction(
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    transactions = await db_get_transactions(user_id=user_id, limit=1000)
     
     if not transactions:
         return CashflowPrediction(
@@ -467,8 +931,13 @@ async def get_cashflow_prediction():
     )
 
 @api_router.post("/upload-csv")
-async def upload_csv(file: UploadFile = File(...)):
+async def upload_csv(
+    file: UploadFile = File(...),
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
     """Upload and parse a bank statement CSV file"""
+    user_id = await _resolve_user_id(x_user_id, authorization)
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="Only CSV files are supported")
     
@@ -501,7 +970,8 @@ async def upload_csv(file: UploadFile = File(...)):
                         "amount": amount_val,
                         "category": category,
                         "merchant": merchant[:100],
-                        "type": trans_type
+                        "type": trans_type,
+                        "user_id": user_id,
                     })
                 except ValueError:
                     continue

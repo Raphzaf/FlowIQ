@@ -349,9 +349,7 @@ const Transactions = () => {
 
   // Handle edit
   const handleEdit = async (updatedTransaction) => {
-    // For now, we'll delete and recreate since the API doesn't have an update endpoint
-    await axios.delete(`${API}/transactions/${updatedTransaction.id}`);
-    await axios.post(`${API}/transactions`, {
+    await axios.put(`${API}/transactions/${updatedTransaction.id}`, {
       date: updatedTransaction.date,
       amount: updatedTransaction.amount,
       category: updatedTransaction.category,

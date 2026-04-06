@@ -3,6 +3,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from "react-router-dom";
 import axios from "axios";
 import { Toaster, toast } from "sonner";
+import { supabase, hasSupabaseEnv } from "./lib/supabaseClient";
 import { 
   LayoutDashboard, 
   Lightbulb, 
@@ -10,7 +11,10 @@ import {
   TrendingUp,
   Menu,
   X,
-  History
+  History,
+  User,
+  LogOut,
+  ShieldCheck
 } from "lucide-react";
 
 // Pages
@@ -19,6 +23,7 @@ import Insights from "./pages/Insights";
 import UploadPage from "./pages/Upload";
 import Transactions from "./pages/Transactions";
 import WidgetPage from "./pages/WidgetPage";
+import Profile from "./pages/Profile";
 import { QuickEntryFAB, QuickEntryDrawer } from "./pages/QuickEntry";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
@@ -30,7 +35,7 @@ export const ApiContext = createContext();
 export const useApi = () => useContext(ApiContext);
 
 // Premium Navigation component
-const Navigation = () => {
+const Navigation = ({ onSignOut }) => {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -49,6 +54,7 @@ const Navigation = () => {
     { path: "/insights", label: "Insights", icon: Lightbulb },
     { path: "/transactions", label: "History", icon: History },
     { path: "/upload", label: "Upload", icon: Upload },
+    { path: "/profile", label: "Profile", icon: User },
   ];
 
   return (
@@ -60,23 +66,24 @@ const Navigation = () => {
       }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 lg:h-18 items-center justify-between">
+        <div className="flex h-14 lg:h-18 items-center justify-between">
           {/* Logo */}
           <NavLink 
             to="/" 
             className="flex items-center gap-2.5 group" 
             data-testid="logo-link"
           >
-            <div className="w-9 h-9 rounded-xl bg-stone-900 flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform duration-200">
-              <TrendingUp className="w-5 h-5 text-white" />
+            <div className="w-8 h-8 lg:w-9 lg:h-9 rounded-xl bg-stone-900 flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform duration-200">
+              <TrendingUp className="w-4 h-4 lg:w-5 lg:h-5 text-white" />
             </div>
-            <span className="font-heading font-bold text-xl text-stone-900">
+            <span className="font-heading font-bold text-lg lg:text-xl text-stone-900">
               FlowIQ
             </span>
           </NavLink>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center gap-1 bg-stone-100/80 backdrop-blur-sm rounded-full p-1" data-testid="desktop-nav">
+          <div className="hidden md:flex items-center gap-2">
+            <nav className="flex items-center gap-1 bg-stone-100/80 backdrop-blur-sm rounded-full p-1" data-testid="desktop-nav">
             {navItems.map((item) => {
               const isActive = location.pathname === item.path;
               const Icon = item.icon;
@@ -96,7 +103,16 @@ const Navigation = () => {
                 </NavLink>
               );
             })}
-          </nav>
+            </nav>
+            <button
+              onClick={onSignOut}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium text-stone-600 hover:text-stone-900 hover:bg-stone-100 transition-all"
+              data-testid="signout-btn"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </button>
+          </div>
 
           {/* Mobile menu button */}
           <button
@@ -139,6 +155,17 @@ const Navigation = () => {
                   </NavLink>
                 );
               })}
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onSignOut();
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-stone-600 hover:bg-stone-100 transition-all"
+                data-testid="mobile-signout-btn"
+              >
+                <LogOut className="w-5 h-5" />
+                Logout
+              </button>
             </div>
           </nav>
         )}
@@ -147,7 +174,102 @@ const Navigation = () => {
   );
 };
 
+const AuthScreen = () => {
+  const [mode, setMode] = useState("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!email || !password) {
+      toast.error("Email and password are required.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      if (mode === "signin") {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        toast.success("Welcome back.");
+      } else {
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        toast.success("Account created. Check your inbox if email confirmation is enabled.");
+      }
+    } catch (error) {
+      console.error("Auth error:", error);
+      toast.error(error?.message || "Authentication failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#FAF9F7] px-4 py-8 flex items-center justify-center">
+      <div className="w-full max-w-md card-premium rounded-3xl p-6 sm:p-8 animate-fade-in-up">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-stone-900 flex items-center justify-center">
+            <ShieldCheck className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h1 className="font-heading text-2xl font-bold text-stone-900">FlowIQ Auth</h1>
+            <p className="text-sm text-stone-500">Secure access with Supabase</p>
+          </div>
+        </div>
+
+        <form onSubmit={submit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-stone-700 mb-1.5">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full h-11 px-3 rounded-xl border border-stone-200 bg-white"
+              placeholder="you@example.com"
+              data-testid="auth-email"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-stone-700 mb-1.5">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full h-11 px-3 rounded-xl border border-stone-200 bg-white"
+              placeholder="Your password"
+              data-testid="auth-password"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full h-11 rounded-xl bg-stone-900 text-white font-medium hover:bg-stone-800 disabled:opacity-60"
+            data-testid="auth-submit"
+          >
+            {loading ? "Please wait..." : mode === "signin" ? "Sign in" : "Create account"}
+          </button>
+        </form>
+
+        <button
+          onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
+          className="w-full mt-3 text-sm text-stone-600 hover:text-stone-900"
+          data-testid="auth-switch-mode"
+        >
+          {mode === "signin" ? "No account? Create one" : "Already have an account? Sign in"}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 function App() {
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [userId, setUserId] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
   const [dashboardData, setDashboardData] = useState(null);
   const [insights, setInsights] = useState([]);
   const [advancedInsights, setAdvancedInsights] = useState(null);
@@ -156,8 +278,82 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [quickEntryOpen, setQuickEntryOpen] = useState(false);
 
+  useEffect(() => {
+    if (!hasSupabaseEnv || !supabase) {
+      toast.error("Missing Supabase frontend env vars.");
+      setAuthLoading(false);
+      return;
+    }
+
+    let mounted = true;
+
+    const init = async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        if (!mounted) return;
+        setSession(data.session || null);
+      } catch (error) {
+        console.error("Unable to get auth session:", error);
+      } finally {
+        if (mounted) setAuthLoading(false);
+      }
+    };
+
+    init();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession || null);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    const accessToken = session?.access_token;
+    const authUserId = session?.user?.id || null;
+
+    if (accessToken) {
+      axios.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
+    } else {
+      delete axios.defaults.headers.common.Authorization;
+    }
+
+    if (authUserId) {
+      axios.defaults.headers.common["X-User-Id"] = authUserId;
+      setUserId(authUserId);
+    } else {
+      delete axios.defaults.headers.common["X-User-Id"];
+      setUserId(null);
+      setUserProfile(null);
+      setDashboardData(null);
+      setInsights([]);
+      setAdvancedInsights(null);
+      setCashflow(null);
+      setTransactions([]);
+      setLoading(false);
+    }
+  }, [session]);
+
+  const signOut = async () => {
+    try {
+      await supabase.auth.signOut();
+      toast.success("Signed out.");
+    } catch (error) {
+      console.error("Sign out failed:", error);
+      toast.error("Unable to sign out.");
+    }
+  };
+
   // Fetch all data
   const fetchData = async () => {
+    if (!session?.access_token) return;
+
     try {
       setLoading(true);
       
@@ -171,7 +367,8 @@ function App() {
       }
       
       // Fetch all data in parallel
-      const [dashRes, insightsRes, advancedInsightsRes, cashflowRes, newTransRes] = await Promise.all([
+      const [profileRes, dashRes, insightsRes, advancedInsightsRes, cashflowRes, newTransRes] = await Promise.all([
+        axios.get(`${API}/profile`),
         axios.get(`${API}/dashboard`),
         axios.get(`${API}/insights`),
         axios.get(`${API}/insights-advanced`),
@@ -179,6 +376,7 @@ function App() {
         axios.get(`${API}/transactions`),
       ]);
       
+      setUserProfile(profileRes.data);
       setDashboardData(dashRes.data);
       setInsights(insightsRes.data);
       setAdvancedInsights(advancedInsightsRes.data);
@@ -193,11 +391,15 @@ function App() {
   };
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (session?.access_token) {
+      fetchData();
+    }
+  }, [session?.access_token]);
 
   const apiValue = {
     API,
+    userId,
+    userProfile,
     dashboardData,
     insights,
     advancedInsights,
@@ -205,19 +407,47 @@ function App() {
     transactions,
     loading,
     refreshData: fetchData,
+    signOut,
   };
+
+  if (!hasSupabaseEnv) {
+    return (
+      <div className="min-h-screen bg-[#FAF9F7] p-6 text-stone-800">
+        <h1 className="font-heading text-2xl font-bold mb-2">Supabase env missing</h1>
+        <p className="text-stone-600">Set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY in frontend env.</p>
+      </div>
+    );
+  }
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#FAF9F7] p-6 flex items-center justify-center text-stone-600">
+        Loading authentication...
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <>
+        <AuthScreen />
+        <Toaster position="bottom-right" />
+      </>
+    );
+  }
 
   return (
     <ApiContext.Provider value={apiValue}>
       <div className="min-h-screen bg-[#FAF9F7]">
         <BrowserRouter>
-          <Navigation />
-          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-10">
+          <Navigation onSignOut={signOut} />
+          <main className="max-w-7xl mx-auto px-3 sm:px-5 lg:px-8 py-6 lg:py-10">
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/insights" element={<Insights />} />
               <Route path="/transactions" element={<Transactions />} />
               <Route path="/upload" element={<UploadPage />} />
+              <Route path="/profile" element={<Profile />} />
               <Route path="/widget" element={<WidgetPage />} />
             </Routes>
           </main>
