@@ -21,7 +21,7 @@ import Transactions from "./pages/Transactions";
 import WidgetPage from "./pages/WidgetPage";
 import { QuickEntryFAB, QuickEntryDrawer } from "./pages/QuickEntry";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
 const API = `${BACKEND_URL}/api`;
 
 // Create API context

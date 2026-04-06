@@ -24,7 +24,7 @@ import { toast } from "sonner";
 import axios from "axios";
 import confetti from 'canvas-confetti';
 
-const API = process.env.REACT_APP_BACKEND_URL + "/api";
+const API = (process.env.REACT_APP_BACKEND_URL || "") + "/api";
 
 // Category configuration with emojis for fun
 const CATEGORIES = [
