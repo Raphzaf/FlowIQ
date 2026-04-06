@@ -20,25 +20,33 @@ from insights_engine import generate_insights
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# Storage connection (Supabase preferred, MongoDB fallback)
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 
-use_supabase = bool(SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)
+def _env(name: str) -> Optional[str]:
+    value = os.environ.get(name)
+    return value.strip() if value else None
+
+# Storage connection (Supabase preferred, MongoDB fallback)
+SUPABASE_URL = _env("SUPABASE_URL")
+SUPABASE_SERVICE_ROLE_KEY = _env("SUPABASE_SERVICE_ROLE_KEY") or _env("SUPABASE_KEY")
+SUPABASE_ANON_KEY = _env("SUPABASE_ANON_KEY")
+SUPABASE_API_KEY = SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY
+
+use_supabase = bool(SUPABASE_URL and SUPABASE_API_KEY)
 supabase = None
 
 client = None
 db = None
 
 if use_supabase:
-    supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    supabase = create_client(SUPABASE_URL, SUPABASE_API_KEY)
 else:
-    mongo_url = os.environ.get("MONGO_URL")
-    db_name = os.environ.get("DB_NAME")
+    mongo_url = _env("MONGO_URL")
+    db_name = _env("DB_NAME")
 
     if not mongo_url or not db_name:
         raise RuntimeError(
             "Missing database configuration. Set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY "
+            "(or SUPABASE_KEY / SUPABASE_ANON_KEY) "
             "or MONGO_URL + DB_NAME."
         )
 
