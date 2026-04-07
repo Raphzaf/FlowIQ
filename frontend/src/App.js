@@ -9,8 +9,6 @@ import {
   Lightbulb, 
   Upload, 
   TrendingUp,
-  Menu,
-  X,
   History,
   User,
   LogOut,
@@ -34,11 +32,19 @@ export const ApiContext = createContext();
 
 export const useApi = () => useContext(ApiContext);
 
-// Premium Navigation component
+// Shared nav items used by both Navigation and MobileBottomNav
+const NAV_ITEMS = [
+  { path: "/", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/insights", label: "Insights", icon: Lightbulb },
+  { path: "/transactions", label: "History", icon: History },
+  { path: "/upload", label: "Upload", icon: Upload },
+  { path: "/profile", label: "Profile", icon: User },
+];
+
+// Premium Navigation component (desktop)
 const Navigation = ({ onSignOut }) => {
-  const location = useLocation();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const location = useLocation();
   
   // Detect scroll for nav styling
   useEffect(() => {
@@ -48,14 +54,6 @@ const Navigation = ({ onSignOut }) => {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
-  
-  const navItems = [
-    { path: "/", label: "Dashboard", icon: LayoutDashboard },
-    { path: "/insights", label: "Insights", icon: Lightbulb },
-    { path: "/transactions", label: "History", icon: History },
-    { path: "/upload", label: "Upload", icon: Upload },
-    { path: "/profile", label: "Profile", icon: User },
-  ];
 
   return (
     <header 
@@ -84,7 +82,7 @@ const Navigation = ({ onSignOut }) => {
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-2">
             <nav className="flex items-center gap-1 bg-stone-100/80 backdrop-blur-sm rounded-full p-1" data-testid="desktop-nav">
-            {navItems.map((item) => {
+            {NAV_ITEMS.map((item) => {
               const isActive = location.pathname === item.path;
               const Icon = item.icon;
               return (
@@ -113,64 +111,58 @@ const Navigation = ({ onSignOut }) => {
               Logout
             </button>
           </div>
-
-          {/* Mobile menu button */}
-          <button
-            className="md:hidden w-10 h-10 rounded-xl flex items-center justify-center hover:bg-stone-100 transition-colors"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            data-testid="mobile-menu-btn"
-          >
-            {mobileMenuOpen ? (
-              <X className="w-5 h-5 text-stone-700" />
-            ) : (
-              <Menu className="w-5 h-5 text-stone-700" />
-            )}
-          </button>
         </div>
-
-        {/* Mobile Navigation */}
-        {mobileMenuOpen && (
-          <nav 
-            className="md:hidden py-4 border-t border-stone-200 animate-fade-in" 
-            data-testid="mobile-nav"
-          >
-            <div className="space-y-1">
-              {navItems.map((item) => {
-                const isActive = location.pathname === item.path;
-                const Icon = item.icon;
-                return (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    onClick={() => setMobileMenuOpen(false)}
-                    data-testid={`mobile-nav-${item.label.toLowerCase()}`}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                      isActive
-                        ? "bg-stone-900 text-white"
-                        : "text-stone-600 hover:bg-stone-100"
-                    }`}
-                  >
-                    <Icon className="w-5 h-5" />
-                    {item.label}
-                  </NavLink>
-                );
-              })}
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  onSignOut();
-                }}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-stone-600 hover:bg-stone-100 transition-all"
-                data-testid="mobile-signout-btn"
-              >
-                <LogOut className="w-5 h-5" />
-                Logout
-              </button>
-            </div>
-          </nav>
-        )}
       </div>
     </header>
+  );
+};
+
+// Mobile bottom navigation bar — replaces the hamburger menu on small screens
+const MobileBottomNav = ({ onSignOut }) => {
+  const location = useLocation();
+
+  return (
+    <nav
+      className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-xl border-t border-stone-200/70"
+      data-testid="mobile-nav"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+    >
+      <div className="flex items-center justify-around px-2 h-16">
+        {NAV_ITEMS.map((item) => {
+          const isActive = location.pathname === item.path;
+          const Icon = item.icon;
+          return (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              data-testid={`mobile-nav-${item.label.toLowerCase()}`}
+              className={`flex flex-col items-center gap-1 px-3 py-1.5 rounded-xl transition-all duration-200 ${
+                isActive
+                  ? "text-stone-900"
+                  : "text-stone-400 hover:text-stone-700"
+              }`}
+            >
+              <div className={`p-1.5 rounded-xl transition-all duration-200 ${
+                isActive ? "bg-stone-900 text-white" : ""
+              }`}>
+                <Icon className="w-5 h-5" />
+              </div>
+              <span className="text-[10px] font-medium leading-none">{item.label}</span>
+            </NavLink>
+          );
+        })}
+        <button
+          onClick={onSignOut}
+          data-testid="mobile-signout-btn"
+          className="flex flex-col items-center gap-1 px-3 py-1.5 rounded-xl text-stone-400 hover:text-stone-700 transition-all duration-200"
+        >
+          <div className="p-1.5 rounded-xl">
+            <LogOut className="w-5 h-5" />
+          </div>
+          <span className="text-[10px] font-medium leading-none">Logout</span>
+        </button>
+      </div>
+    </nav>
   );
 };
 
@@ -612,7 +604,7 @@ function App() {
       <div className="min-h-screen bg-[#FAF9F7]">
         <BrowserRouter>
           <Navigation onSignOut={signOut} />
-          <main className="max-w-7xl mx-auto px-3 sm:px-5 lg:px-8 py-6 lg:py-10">
+          <main className="max-w-7xl mx-auto px-3 sm:px-5 lg:px-8 py-6 lg:py-10 pb-24 md:pb-10">
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/insights" element={<Insights />} />
@@ -630,6 +622,9 @@ function App() {
             onOpenChange={setQuickEntryOpen}
             onSuccess={fetchData}
           />
+          
+          {/* Mobile bottom navigation */}
+          <MobileBottomNav onSignOut={signOut} />
         </BrowserRouter>
         <Toaster 
           position="bottom-right" 
