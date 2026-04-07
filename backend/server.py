@@ -420,7 +420,7 @@ def generate_demo_data():
         transactions.append({
             "id": str(uuid.uuid4()),
             "date": month_date.replace(day=1).strftime("%Y-%m-%d"),
-            "amount": 5000.00,
+            "amount": 0,
             "category": "Income",
             "merchant": "Salary Deposit",
             "type": "income"
@@ -448,7 +448,7 @@ def generate_demo_data():
             }
             
             min_amt, max_amt = amount_ranges[category]
-            amount = round(random.uniform(min_amt, max_amt), 2)
+            amount = 0
             
             transactions.append({
                 "id": str(uuid.uuid4()),
