@@ -174,14 +174,116 @@ const Navigation = ({ onSignOut }) => {
   );
 };
 
+const ResetPasswordScreen = ({ onDone }) => {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!password || password.length < 6) {
+      toast.error("Password must be at least 6 characters.");
+      return;
+    }
+    if (password !== confirm) {
+      toast.error("Passwords do not match.");
+      return;
+    }
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
+      toast.success("Password updated! You are now signed in.");
+      onDone();
+    } catch (error) {
+      console.error("Password update error:", error);
+      toast.error(error?.message || "Failed to update password.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#FAF9F7] px-4 py-8 flex items-center justify-center">
+      <div className="w-full max-w-md card-premium rounded-3xl p-6 sm:p-8 animate-fade-in-up">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-stone-900 flex items-center justify-center">
+            <ShieldCheck className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h1 className="font-heading text-2xl font-bold text-stone-900">New password</h1>
+            <p className="text-sm text-stone-500">Choose a strong password</p>
+          </div>
+        </div>
+        <form onSubmit={submit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-stone-700 mb-1.5">New password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full h-11 px-3 rounded-xl border border-stone-200 bg-white"
+              placeholder="At least 6 characters"
+              data-testid="reset-password"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-stone-700 mb-1.5">Confirm password</label>
+            <input
+              type="password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              className="w-full h-11 px-3 rounded-xl border border-stone-200 bg-white"
+              placeholder="Repeat your password"
+              data-testid="reset-confirm"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full h-11 rounded-xl bg-stone-900 text-white font-medium hover:bg-stone-800 disabled:opacity-60"
+            data-testid="reset-submit"
+          >
+            {loading ? "Updating..." : "Set new password"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 const AuthScreen = () => {
   const [mode, setMode] = useState("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
+
+    if (mode === "forgot") {
+      if (!email) {
+        toast.error("Please enter your email address.");
+        return;
+      }
+      try {
+        setLoading(true);
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.origin,
+        });
+        if (error) throw error;
+        setResetSent(true);
+        toast.success("Reset link sent! Check your inbox.");
+      } catch (error) {
+        console.error("Reset error:", error);
+        toast.error(error?.message || "Failed to send reset email.");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     if (!email || !password) {
       toast.error("Email and password are required.");
       return;
@@ -218,52 +320,102 @@ const AuthScreen = () => {
             <ShieldCheck className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="font-heading text-2xl font-bold text-stone-900">FlowIQ Auth</h1>
-            <p className="text-sm text-stone-500">Secure access with Supabase</p>
+            <h1 className="font-heading text-2xl font-bold text-stone-900">
+              {mode === "forgot" ? "Reset password" : "FlowIQ Auth"}
+            </h1>
+            <p className="text-sm text-stone-500">
+              {mode === "forgot" ? "We'll send you a reset link" : "Secure access with Supabase"}
+            </p>
           </div>
         </div>
 
-        <form onSubmit={submit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-stone-700 mb-1.5">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full h-11 px-3 rounded-xl border border-stone-200 bg-white"
-              placeholder="you@example.com"
-              data-testid="auth-email"
-            />
+        {mode === "forgot" && resetSent ? (
+          <div className="text-center py-4 space-y-3">
+            <p className="text-stone-700 text-sm">
+              A password reset link has been sent to <strong>{email}</strong>. Click the link in your inbox to choose a new password.
+            </p>
+            <button
+              onClick={() => { setMode("signin"); setResetSent(false); setEmail(""); }}
+              className="text-sm text-stone-600 hover:text-stone-900 underline"
+            >
+              Back to sign in
+            </button>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-stone-700 mb-1.5">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full h-11 px-3 rounded-xl border border-stone-200 bg-white"
-              placeholder="Your password"
-              data-testid="auth-password"
-            />
-          </div>
+        ) : (
+          <>
+            <form onSubmit={submit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-stone-700 mb-1.5">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full h-11 px-3 rounded-xl border border-stone-200 bg-white"
+                  placeholder="you@example.com"
+                  data-testid="auth-email"
+                />
+              </div>
+              {mode !== "forgot" && (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-sm font-medium text-stone-700">Password</label>
+                    {mode === "signin" && (
+                      <button
+                        type="button"
+                        onClick={() => { setMode("forgot"); setResetSent(false); }}
+                        className="text-xs text-stone-500 hover:text-stone-800"
+                        data-testid="auth-forgot-link"
+                      >
+                        Forgot password?
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full h-11 px-3 rounded-xl border border-stone-200 bg-white"
+                    placeholder="Your password"
+                    data-testid="auth-password"
+                  />
+                </div>
+              )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full h-11 rounded-xl bg-stone-900 text-white font-medium hover:bg-stone-800 disabled:opacity-60"
-            data-testid="auth-submit"
-          >
-            {loading ? "Please wait..." : mode === "signin" ? "Sign in" : "Create account"}
-          </button>
-        </form>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full h-11 rounded-xl bg-stone-900 text-white font-medium hover:bg-stone-800 disabled:opacity-60"
+                data-testid="auth-submit"
+              >
+                {loading
+                  ? "Please wait..."
+                  : mode === "signin"
+                  ? "Sign in"
+                  : mode === "forgot"
+                  ? "Send reset link"
+                  : "Create account"}
+              </button>
+            </form>
 
-        <button
-          onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-          className="w-full mt-3 text-sm text-stone-600 hover:text-stone-900"
-          data-testid="auth-switch-mode"
-        >
-          {mode === "signin" ? "No account? Create one" : "Already have an account? Sign in"}
-        </button>
+            {mode === "forgot" ? (
+              <button
+                onClick={() => { setMode("signin"); setResetSent(false); }}
+                className="w-full mt-3 text-sm text-stone-600 hover:text-stone-900"
+                data-testid="auth-back-to-signin"
+              >
+                Back to sign in
+              </button>
+            ) : (
+              <button
+                onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
+                className="w-full mt-3 text-sm text-stone-600 hover:text-stone-900"
+                data-testid="auth-switch-mode"
+              >
+                {mode === "signin" ? "No account? Create one" : "Already have an account? Sign in"}
+              </button>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
@@ -281,6 +433,7 @@ function App() {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [quickEntryOpen, setQuickEntryOpen] = useState(false);
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
 
   useEffect(() => {
     if (!hasSupabaseEnv || !supabase) {
@@ -309,6 +462,11 @@ function App() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (_event === "PASSWORD_RECOVERY") {
+        setPasswordRecovery(true);
+      } else {
+        setPasswordRecovery(false);
+      }
       setSession(nextSession || null);
     });
 
@@ -428,6 +586,15 @@ function App() {
       <div className="min-h-screen bg-[#FAF9F7] p-6 flex items-center justify-center text-stone-600">
         Loading authentication...
       </div>
+    );
+  }
+
+  if (passwordRecovery && session) {
+    return (
+      <>
+        <ResetPasswordScreen onDone={() => setPasswordRecovery(false)} />
+        <Toaster position="bottom-right" />
+      </>
     );
   }
 
