@@ -3,7 +3,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from "react-router-dom";
 import axios from "axios";
 import { Toaster, toast } from "sonner";
-import { supabase, hasSupabaseEnv } from "./lib/supabaseClient";
+import { supabase, hasSupabaseEnv, supabaseConfigError } from "./lib/supabaseClient";
 import { 
   LayoutDashboard, 
   Lightbulb, 
@@ -200,7 +200,11 @@ const AuthScreen = () => {
       }
     } catch (error) {
       console.error("Auth error:", error);
-      toast.error(error?.message || "Authentication failed.");
+      if (error?.message === "Invalid login credentials") {
+        toast.error("Invalid email or password. If this is a new account, create one first.");
+      } else {
+        toast.error(error?.message || "Authentication failed.");
+      }
     } finally {
       setLoading(false);
     }
@@ -414,7 +418,7 @@ function App() {
     return (
       <div className="min-h-screen bg-[#FAF9F7] p-6 text-stone-800">
         <h1 className="font-heading text-2xl font-bold mb-2">Supabase env missing</h1>
-        <p className="text-stone-600">Set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY in frontend env.</p>
+        <p className="text-stone-600">{supabaseConfigError || "Set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY in frontend env."}</p>
       </div>
     );
   }
