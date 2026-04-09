@@ -27,18 +27,18 @@ function verifyInternalSecret(req) {
     return { ok: false, error: "Missing X-Internal-Secret header" };
   }
 
-  // Constant-time comparison to avoid timing attacks
+  // Constant-time comparison to avoid timing attacks.
+  // We always compare same-length buffers by padding the shorter one, ensuring
+  // no length-based timing leak. If lengths differ the result is always false.
   const expectedBuf = Buffer.from(secret, "utf8");
   const providedBuf = Buffer.from(provided, "utf8");
+  const maxLen = Math.max(expectedBuf.length, providedBuf.length);
+  const paddedExpected = Buffer.alloc(maxLen);
+  const paddedProvided = Buffer.alloc(maxLen);
+  expectedBuf.copy(paddedExpected);
+  providedBuf.copy(paddedProvided);
 
-  if (expectedBuf.length !== providedBuf.length) {
-    // Use timingSafeEqual on same-length buffers to avoid length leaking
-    // Still compare to prevent short-circuit — but lengths differ so it's always false
-    crypto.timingSafeEqual(expectedBuf, Buffer.alloc(expectedBuf.length));
-    return { ok: false, error: "Forbidden" };
-  }
-
-  if (!crypto.timingSafeEqual(expectedBuf, providedBuf)) {
+  if (!crypto.timingSafeEqual(paddedExpected, paddedProvided)) {
     return { ok: false, error: "Forbidden" };
   }
 

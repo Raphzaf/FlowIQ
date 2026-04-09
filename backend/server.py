@@ -1059,7 +1059,12 @@ import httpx
 
 from integrations.israel_banks.connector import SUPPORTED_BANKS
 from integrations.israel_banks.crypto import encrypt_credentials, decrypt_credentials
-from integrations.israel_banks.normalizer import normalize_transaction, normalize_account
+from integrations.israel_banks.normalizer import (
+    normalize_transaction,
+    normalize_account,
+    normalize_scraper_account as _normalize_scraper_account,
+    normalize_scraper_transaction as _normalize_scraper_transaction,
+)
 from integrations.israel_banks.scheduler import BankSyncScheduler
 
 
@@ -1286,7 +1291,9 @@ async def connect_bank(
         credentials = {}
         if payload.username:
             credentials["username"] = payload.username
-            credentials["userCode"] = payload.username  # hapoalim alias
+            # hapoalim uses `userCode` rather than `username`
+            if payload.bank_id == "hapoalim":
+                credentials["userCode"] = payload.username
         credentials["password"] = payload.password
 
     bank_meta = SUPPORTED_BANKS[payload.bank_id]
@@ -1516,67 +1523,6 @@ async def manual_sync(
         transaction_count=len(all_txs),
         synced_at=now_iso,
     )
-
-
-# ---------------------------------------------------------------------------
-# Scraper-result normalisation helpers
-# ---------------------------------------------------------------------------
-
-def _normalize_scraper_account(account: Dict[str, Any], bank_id: str) -> Dict[str, Any]:
-    """Convert a scraper-service account dict to FlowIQ's account format."""
-    account_number = account.get("accountNumber", "unknown")
-    return {
-        "account_id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"{bank_id}:{account_number}")),
-        "account_number": account_number,
-        "bank_id": bank_id,
-        "balance": round(float(account.get("balance") or 0), 2),
-        "currency": "ILS",
-        "name": account_number,
-    }
-
-
-def _normalize_scraper_transaction(
-    txn: Dict[str, Any],
-    account_number: str,
-    bank_id: str,
-    user_id: str,
-) -> Optional[Dict[str, Any]]:
-    """Convert a scraper-service transaction dict to FlowIQ's transaction format."""
-    from integrations.israel_banks.normalizer import _guess_category
-
-    charged_amount = txn.get("chargedAmount") or txn.get("originalAmount") or 0
-    try:
-        amount = float(charged_amount)
-    except (TypeError, ValueError):
-        return None
-
-    description = str(txn.get("description") or "Unknown")
-    tx_date = txn.get("date") or txn.get("processedDate") or datetime.now(timezone.utc).date().isoformat()
-    # Trim ISO timestamp to date-only if needed
-    if "T" in tx_date:
-        tx_date = tx_date[:10]
-
-    identifier = txn.get("identifier") or ""
-    external_id = f"{bank_id}:{account_number}:{tx_date}:{identifier}:{amount}"
-
-    tx_type = "income" if amount >= 0 else "expense"
-    abs_amount = round(abs(amount), 2)
-
-    currency = txn.get("chargedCurrency") or txn.get("originalCurrency") or "ILS"
-    category = _guess_category(description, txn.get("category"))
-
-    return {
-        "id": str(uuid.uuid5(uuid.NAMESPACE_URL, external_id)),
-        "date": tx_date,
-        "amount": abs_amount,
-        "category": category,
-        "merchant": description[:100],
-        "type": tx_type,
-        "user_id": user_id,
-        "source": f"Israel Bank – {bank_id}",
-        "currency": currency,
-        "external_id": str(uuid.uuid5(uuid.NAMESPACE_URL, external_id)),
-    }
 
 
 # ---------------------------------------------------------------------------

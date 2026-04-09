@@ -146,8 +146,8 @@ class BankSyncScheduler:
         delay = 30.0
         while attempt < self._max_retries:
             try:
-                from .normalizer import _guess_category
-                import uuid
+                from .crypto import decrypt_credentials
+                from .normalizer import normalize_scraper_transaction
 
                 creds = decrypt_credentials(encrypted_creds)
 
@@ -170,31 +170,9 @@ class BankSyncScheduler:
                 for account in raw_accounts:
                     acct_num = account.get("accountNumber", "unknown")
                     for txn in account.get("txns", []):
-                        charged = txn.get("chargedAmount") or txn.get("originalAmount") or 0
-                        try:
-                            amount = float(charged)
-                        except (TypeError, ValueError):
-                            continue
-                        description = str(txn.get("description") or "Unknown")
-                        tx_date = txn.get("date") or txn.get("processedDate") or datetime.now(timezone.utc).date().isoformat()
-                        if "T" in tx_date:
-                            tx_date = tx_date[:10]
-                        identifier = str(txn.get("identifier") or "")
-                        ext_raw = f"{bank_id}:{acct_num}:{tx_date}:{identifier}:{amount}"
-                        tx_type = "income" if amount >= 0 else "expense"
-                        currency = txn.get("chargedCurrency") or txn.get("originalCurrency") or "ILS"
-                        all_txs.append({
-                            "id": str(uuid.uuid5(uuid.NAMESPACE_URL, ext_raw)),
-                            "date": tx_date,
-                            "amount": round(abs(amount), 2),
-                            "category": _guess_category(description, txn.get("category")),
-                            "merchant": description[:100],
-                            "type": tx_type,
-                            "user_id": user_id,
-                            "source": f"Israel Bank – {bank_id}",
-                            "currency": currency,
-                            "external_id": str(uuid.uuid5(uuid.NAMESPACE_URL, ext_raw)),
-                        })
+                        normalized = normalize_scraper_transaction(txn, acct_num, bank_id, user_id)
+                        if normalized:
+                            all_txs.append(normalized)
 
                 if all_txs:
                     await self._upsert_transactions(all_txs)
