@@ -14,7 +14,8 @@ import {
   History,
   User,
   LogOut,
-  ShieldCheck
+  ShieldCheck,
+  Building2
 } from "lucide-react";
 
 // Pages
@@ -24,6 +25,7 @@ import UploadPage from "./pages/Upload";
 import Transactions from "./pages/Transactions";
 import WidgetPage from "./pages/WidgetPage";
 import Profile from "./pages/Profile";
+import IsraeliBank from "./pages/IsraeliBank";
 import { QuickEntryFAB, QuickEntryDrawer } from "./pages/QuickEntry";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
@@ -54,6 +56,7 @@ const Navigation = ({ onSignOut }) => {
     { path: "/insights", label: "Insights", icon: Lightbulb },
     { path: "/transactions", label: "History", icon: History },
     { path: "/upload", label: "Upload", icon: Upload },
+    { path: "/banks", label: "Banks", icon: Building2 },
     { path: "/profile", label: "Profile", icon: User },
   ];
 
@@ -618,6 +621,7 @@ function App() {
               <Route path="/insights" element={<Insights />} />
               <Route path="/transactions" element={<Transactions />} />
               <Route path="/upload" element={<UploadPage />} />
+              <Route path="/banks" element={<IsraeliBank />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/widget" element={<WidgetPage />} />
             </Routes>
