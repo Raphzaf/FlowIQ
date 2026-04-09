@@ -108,3 +108,65 @@ python -m pytest tests/test_israel_banks.py -v
 ```
 
 ---
+
+## Backend security – environment variables
+
+### Production detection
+
+The backend considers itself to be running in **production** when any of the
+following environment variables equals `production` (case-insensitive):
+
+| Variable | Example |
+|----------|---------|
+| `ENV` | `production` |
+| `NODE_ENV` | `production` |
+| `APP_ENV` | `production` |
+
+### `CRON_SECRET`
+
+Protects the `/api/banks/sync-all` endpoint that is designed to be called by a
+scheduler (e.g. Vercel Cron).
+
+| Scenario | Behaviour |
+|----------|-----------|
+| Production, `CRON_SECRET` **absent** | Request refused with **500** – the endpoint cannot be called safely without a secret in production. |
+| Production, `CRON_SECRET` **present** | The `X-Cron-Secret` request header must match. Comparison is done with `hmac.compare_digest` to prevent timing attacks. |
+| Development, `CRON_SECRET` **absent** | No check – permissive for local development. |
+| Development, `CRON_SECRET` **present** | Same strict check as production. |
+
+Set a random, high-entropy value:
+
+```bash
+CRON_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+```
+
+### `CORS_ORIGINS`
+
+Controls which origins are allowed by the CORS middleware.
+
+| Scenario | Behaviour |
+|----------|-----------|
+| Production, `CORS_ORIGINS` **absent or empty** | Server **refuses to start** – wildcard is forbidden in production. |
+| Production, `CORS_ORIGINS` contains `*` | Server **refuses to start**. |
+| Production, valid list | Only the listed origins are allowed. |
+| Development, not set | Defaults to `*` (permissive for local development). |
+
+Format: comma-separated list of origins.
+
+```bash
+CORS_ORIGINS=https://app.flowiq.com,https://staging.flowiq.com
+```
+
+### Rate limiting
+
+The backend applies in-memory, fixed-window rate limiting (no Redis required):
+
+| Endpoint pattern | Limit |
+|-----------------|-------|
+| `/api/banks/*/connect` | 5 req / min / IP |
+| `/api/upload-csv` | 10 req / 5 min / IP |
+| `/api/banks/sync-all` | 2 req / min / IP |
+
+Exceeded limits return **429 Too Many Requests** with a `Retry-After` header.
+
+---
