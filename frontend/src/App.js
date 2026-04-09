@@ -1,6 +1,6 @@
 import { useEffect, useState, createContext, useContext } from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route, NavLink, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, NavLink, useLocation, Navigate } from "react-router-dom";
 import axios from "axios";
 import { Toaster, toast } from "sonner";
 import { supabase, hasSupabaseEnv, supabaseConfigError } from "./lib/supabaseClient";
@@ -27,6 +27,7 @@ import WidgetPage from "./pages/WidgetPage";
 import Profile from "./pages/Profile";
 import IsraeliBank from "./pages/IsraeliBank";
 import WoobBanks from "./pages/WoobBanks";
+import OnboardingPage from "./pages/OnboardingPage";
 import { QuickEntryFAB, QuickEntryDrawer } from "./pages/QuickEntry";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
@@ -524,16 +525,7 @@ function App() {
     try {
       setLoading(true);
       
-      // Check if we need to seed demo data
-      const transRes = await axios.get(`${API}/transactions`);
-      
-      if (transRes.data.length === 0) {
-        // Seed demo data
-        await axios.post(`${API}/seed-demo-data`);
-        toast.success("Demo data loaded! Explore your financial dashboard.");
-      }
-      
-      // Fetch all data in parallel
+      // Fetch all data in parallel (no auto-seeding: let users import their own data)
       const [profileRes, dashRes, insightsRes, advancedInsightsRes, cashflowRes, newTransRes] = await Promise.all([
         axios.get(`${API}/profile`),
         axios.get(`${API}/dashboard`),
@@ -577,6 +569,15 @@ function App() {
     signOut,
   };
 
+  // Determine onboarding state:
+  // - Wait until profile has loaded (userProfile !== null) before deciding
+  // - null/undefined onboarding_status (existing users without onboarding data) → treat as completed
+  // - "not_started" or "in_progress" → redirect to onboarding
+  // - "completed" → allow access to the full app
+  const onboardingStatus = userProfile?.onboarding_status;
+  const onboardingCompleted =
+    userProfile !== null && (!onboardingStatus || onboardingStatus === "completed");
+
   if (!hasSupabaseEnv) {
     return (
       <div className="min-h-screen bg-[#FAF9F7] p-6 text-stone-800">
@@ -616,27 +617,54 @@ function App() {
     <ApiContext.Provider value={apiValue}>
       <div className="min-h-screen bg-[#FAF9F7]">
         <BrowserRouter>
-          <Navigation onSignOut={signOut} />
-          <main className="max-w-7xl mx-auto px-3 sm:px-5 lg:px-8 py-6 lg:py-10">
+          {/* Show nav only when onboarding is done */}
+          {onboardingCompleted && <Navigation onSignOut={signOut} />}
+          <main className={onboardingCompleted ? "max-w-7xl mx-auto px-3 sm:px-5 lg:px-8 py-6 lg:py-10" : ""}>
             <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/insights" element={<Insights />} />
-              <Route path="/transactions" element={<Transactions />} />
-              <Route path="/upload" element={<UploadPage />} />
-              <Route path="/banks" element={<IsraeliBank />} />
-              <Route path="/banks/woob" element={<WoobBanks />} />
+              {/* Onboarding route — always accessible */}
+              <Route path="/onboarding" element={<OnboardingPage />} />
+
+              {/* Exempt routes that should work regardless of onboarding */}
               <Route path="/profile" element={<Profile />} />
               <Route path="/widget" element={<WidgetPage />} />
+
+              {onboardingCompleted ? (
+                <>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/insights" element={<Insights />} />
+                  <Route path="/transactions" element={<Transactions />} />
+                  <Route path="/upload" element={<UploadPage />} />
+                  <Route path="/banks" element={<IsraeliBank />} />
+                  <Route path="/banks/woob" element={<WoobBanks />} />
+                </>
+              ) : loading ? (
+                // Wait for profile to load before redirecting (prevents redirect loop)
+                <Route
+                  path="*"
+                  element={
+                    <div className="min-h-screen bg-[#FAF9F7] flex items-center justify-center text-stone-500">
+                      Loading your profile...
+                    </div>
+                  }
+                />
+              ) : (
+                // Onboarding not completed: redirect everything to /onboarding
+                <Route path="*" element={<Navigate to="/onboarding" replace />} />
+              )}
             </Routes>
           </main>
           
-          {/* Quick Entry FAB and Drawer */}
-          <QuickEntryFAB onClick={() => setQuickEntryOpen(true)} />
-          <QuickEntryDrawer 
-            open={quickEntryOpen} 
-            onOpenChange={setQuickEntryOpen}
-            onSuccess={fetchData}
-          />
+          {/* Quick Entry FAB and Drawer — only when onboarding is done */}
+          {onboardingCompleted && (
+            <>
+              <QuickEntryFAB onClick={() => setQuickEntryOpen(true)} />
+              <QuickEntryDrawer 
+                open={quickEntryOpen} 
+                onOpenChange={setQuickEntryOpen}
+                onSuccess={fetchData}
+              />
+            </>
+          )}
         </BrowserRouter>
         <Toaster 
           position="bottom-right" 

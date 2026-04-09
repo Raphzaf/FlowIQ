@@ -168,6 +168,9 @@ def _default_profile(user_id: str) -> Dict[str, Any]:
         "monthly_other_fixed_expenses": None,
         "monthly_other_fixed_expenses_day": 1,
         "timezone": "UTC",
+        "onboarding_status": "not_started",
+        "onboarding_step": 1,
+        "onboarding_completed_at": None,
         "created_at": now_iso,
         "updated_at": now_iso,
     }
@@ -363,6 +366,9 @@ class UserProfile(BaseModel):
     monthly_other_fixed_expenses: Optional[float] = None
     monthly_other_fixed_expenses_day: int = 1
     timezone: str = "UTC"
+    onboarding_status: Optional[str] = "not_started"
+    onboarding_step: Optional[int] = 1
+    onboarding_completed_at: Optional[str] = None
     created_at: str
     updated_at: str
 
@@ -380,6 +386,16 @@ class UserProfileUpdate(BaseModel):
     monthly_other_fixed_expenses: Optional[float] = None
     monthly_other_fixed_expenses_day: Optional[int] = None
     timezone: Optional[str] = None
+    onboarding_status: Optional[str] = None
+    onboarding_step: Optional[int] = None
+    onboarding_completed_at: Optional[str] = None
+
+
+class OnboardingUpdate(BaseModel):
+    onboarding_status: Optional[str] = None
+    onboarding_step: Optional[int] = None
+    onboarding_completed_at: Optional[str] = None
+    currency: Optional[str] = None
 
 
 class MonthlyPlanApplyResult(BaseModel):
@@ -515,6 +531,40 @@ async def update_profile(
             day_value = int(updates[field])
             if day_value < 1 or day_value > 31:
                 raise HTTPException(status_code=400, detail=f"{field} must be between 1 and 31")
+
+    merged = {
+        **current,
+        **updates,
+        "user_id": user_id,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if not merged.get("created_at"):
+        merged["created_at"] = datetime.now(timezone.utc).isoformat()
+
+    saved = await db_upsert_profile(merged)
+    return UserProfile(**saved)
+
+
+@api_router.patch("/onboarding", response_model=UserProfile)
+async def update_onboarding(
+    payload: OnboardingUpdate,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    current = await db_get_profile(user_id)
+    if not current:
+        current = _default_profile(user_id)
+
+    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+
+    if "onboarding_status" in updates:
+        allowed_statuses = {"not_started", "in_progress", "completed"}
+        if updates["onboarding_status"] not in allowed_statuses:
+            raise HTTPException(status_code=400, detail="onboarding_status must be one of: not_started, in_progress, completed")
+
+    if updates.get("onboarding_status") == "completed" and not updates.get("onboarding_completed_at"):
+        updates["onboarding_completed_at"] = datetime.now(timezone.utc).isoformat()
 
     merged = {
         **current,
