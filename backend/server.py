@@ -989,6 +989,303 @@ async def upload_csv(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error parsing CSV: {str(e)}")
 
+# ---------------------------------------------------------------------------
+# Israeli Bank Integration endpoints
+# ---------------------------------------------------------------------------
+
+from integrations.israel_banks.connector import SUPPORTED_BANKS
+from integrations.israel_banks.connectors import HapoalimConnector, LeumiConnector, DiscountConnector
+from integrations.israel_banks.crypto import encrypt_credentials, decrypt_credentials
+from integrations.israel_banks.normalizer import normalize_transaction, normalize_account
+from integrations.israel_banks.scheduler import BankSyncScheduler
+
+_BANK_CONNECTORS = {
+    "hapoalim": HapoalimConnector,
+    "leumi": LeumiConnector,
+    "discount": DiscountConnector,
+}
+
+# ---------------------------------------------------------------------------
+# DB helpers – bank connections
+# ---------------------------------------------------------------------------
+
+async def db_get_bank_connections(user_id: str) -> List[Dict[str, Any]]:
+    if use_supabase:
+        response = (
+            supabase.table("bank_connections")
+            .select("*")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        return response.data or []
+    return await db.bank_connections.find({"user_id": user_id}, {"_id": 0}).to_list(100)
+
+
+async def db_get_all_active_bank_connections() -> List[Dict[str, Any]]:
+    if use_supabase:
+        response = (
+            supabase.table("bank_connections")
+            .select("*")
+            .eq("status", "connected")
+            .execute()
+        )
+        return response.data or []
+    return await db.bank_connections.find({"status": "connected"}, {"_id": 0}).to_list(1000)
+
+
+async def db_upsert_bank_connection(conn: Dict[str, Any]) -> Dict[str, Any]:
+    if use_supabase:
+        response = (
+            supabase.table("bank_connections")
+            .upsert(conn, on_conflict="id")
+            .execute()
+        )
+        rows = response.data or []
+        return rows[0] if rows else conn
+    await db.bank_connections.update_one(
+        {"id": conn["id"]}, {"$set": conn}, upsert=True
+    )
+    return conn
+
+
+async def db_delete_bank_connection(conn_id: str, user_id: str) -> int:
+    if use_supabase:
+        response = (
+            supabase.table("bank_connections")
+            .delete()
+            .eq("id", conn_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        return len(response.data or [])
+    result = await db.bank_connections.delete_one({"id": conn_id, "user_id": user_id})
+    return result.deleted_count
+
+
+async def db_upsert_transactions_by_external_id(transactions: List[Dict[str, Any]]) -> None:
+    """Insert transactions that don't already exist (de-dup by external_id)."""
+    if not transactions:
+        return
+    if use_supabase:
+        supabase.table("transactions").upsert(transactions, on_conflict="external_id").execute()
+        return
+    for tx in transactions:
+        await db.transactions.update_one(
+            {"external_id": tx["external_id"]},
+            {"$set": tx},
+            upsert=True,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Pydantic models for the bank endpoints
+# ---------------------------------------------------------------------------
+
+class BankConnectRequest(BaseModel):
+    bank_id: str
+    username: str
+    password: str
+
+
+class BankSyncResponse(BaseModel):
+    bank_id: str
+    account_count: int
+    transaction_count: int
+    synced_at: str
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+@api_router.get("/banks/israel/supported")
+async def list_supported_banks():
+    """Return metadata for all supported Israeli banks."""
+    return list(SUPPORTED_BANKS.values())
+
+
+@api_router.get("/banks/israel/connections")
+async def get_bank_connections(
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    """List the current user's bank connections (credentials are not returned)."""
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    connections = await db_get_bank_connections(user_id)
+    # Strip sensitive fields before returning
+    safe = []
+    for c in connections:
+        safe.append({k: v for k, v in c.items() if k != "encrypted_credentials"})
+    return safe
+
+
+@api_router.post("/banks/israel/connect")
+async def connect_bank(
+    payload: BankConnectRequest,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    """Initiate a connection to an Israeli bank and run the first sync."""
+    user_id = await _resolve_user_id(x_user_id, authorization)
+
+    if payload.bank_id not in _BANK_CONNECTORS:
+        raise HTTPException(status_code=400, detail=f"Unsupported bank: {payload.bank_id}")
+
+    ConnectorCls = _BANK_CONNECTORS[payload.bank_id]
+    connector = ConnectorCls()
+
+    credentials = {"username": payload.username, "password": payload.password}
+
+    try:
+        session = connector.login(credentials)
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail=f"Authentication failed: {exc}")
+
+    # Fetch accounts to confirm connection
+    try:
+        accounts = connector.fetch_accounts(session)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch accounts: {exc}")
+
+    connector.logout(session)
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{user_id}:{payload.bank_id}"))
+
+    conn_record = {
+        "id": conn_id,
+        "user_id": user_id,
+        "bank_id": payload.bank_id,
+        "bank_name": SUPPORTED_BANKS[payload.bank_id]["name"],
+        "status": "connected",
+        "encrypted_credentials": encrypt_credentials(credentials),
+        "accounts": [normalize_account(a) for a in accounts],
+        "last_synced_at": None,
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+
+    await db_upsert_bank_connection(conn_record)
+
+    return {k: v for k, v in conn_record.items() if k != "encrypted_credentials"}
+
+
+@api_router.post("/banks/israel/disconnect")
+async def disconnect_bank(
+    payload: Dict[str, str],
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    """Remove a bank connection."""
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    bank_id = payload.get("bank_id", "")
+    conn_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{user_id}:{bank_id}"))
+    deleted = await db_delete_bank_connection(conn_id, user_id)
+    if deleted == 0:
+        raise HTTPException(status_code=404, detail="Connection not found")
+    return {"message": f"Disconnected from {bank_id}"}
+
+
+@api_router.get("/banks/israel/accounts")
+async def get_bank_accounts(
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    """Return all bank accounts across all connected institutions."""
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    connections = await db_get_bank_connections(user_id)
+    all_accounts = []
+    for conn in connections:
+        if conn.get("status") != "connected":
+            continue
+        for acc in conn.get("accounts", []):
+            all_accounts.append({**acc, "bank_name": conn.get("bank_name", conn.get("bank_id"))})
+    return all_accounts
+
+
+@api_router.post("/banks/israel/sync", response_model=BankSyncResponse)
+async def manual_sync(
+    payload: Dict[str, str],
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    """Manually trigger a transaction sync for a specific bank connection."""
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    bank_id = payload.get("bank_id", "")
+    conn_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{user_id}:{bank_id}"))
+
+    connections = await db_get_bank_connections(user_id)
+    conn = next((c for c in connections if c.get("id") == conn_id), None)
+    if not conn:
+        raise HTTPException(status_code=404, detail="Bank connection not found")
+
+    ConnectorCls = _BANK_CONNECTORS.get(bank_id)
+    if ConnectorCls is None:
+        raise HTTPException(status_code=400, detail=f"Unsupported bank: {bank_id}")
+
+    try:
+        creds = decrypt_credentials(conn["encrypted_credentials"])
+        connector = ConnectorCls()
+        session = connector.login(creds)
+        accounts = connector.fetch_accounts(session)
+
+        last_synced_at = conn.get("last_synced_at")
+        from_date = (
+            datetime.fromisoformat(last_synced_at).date()
+            if last_synced_at
+            else (datetime.now(timezone.utc) - timedelta(days=30)).date()
+        )
+        to_date = datetime.now(timezone.utc).date()
+
+        all_txs: List[Dict[str, Any]] = []
+        for account in accounts:
+            raw_txs = connector.fetch_transactions(session, account.account_id, from_date, to_date)
+            for raw in raw_txs:
+                normalized = normalize_transaction(raw, user_id=user_id, source_label=f"Israel Bank – {bank_id}")
+                all_txs.append(normalized)
+
+        connector.logout(session)
+
+        if all_txs:
+            await db_upsert_transactions_by_external_id(all_txs)
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        conn["last_synced_at"] = now_iso
+        conn["updated_at"] = now_iso
+        conn["accounts"] = [normalize_account(a) for a in accounts]
+        await db_upsert_bank_connection(conn)
+
+        return BankSyncResponse(
+            bank_id=bank_id,
+            account_count=len(accounts),
+            transaction_count=len(all_txs),
+            synced_at=now_iso,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Sync failed: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Scheduler – started at app startup
+# ---------------------------------------------------------------------------
+
+_scheduler: Optional[BankSyncScheduler] = None
+
+
+@app.on_event("startup")
+async def startup_bank_scheduler():
+    global _scheduler
+    _scheduler = BankSyncScheduler(
+        get_connections=db_get_all_active_bank_connections,
+        upsert_transactions=db_upsert_transactions_by_external_id,
+        sync_interval_hours=int(os.environ.get("ISRAEL_BANKS_SYNC_HOURS", "6")),
+    )
+    _scheduler.start()
+
+
 # Include the router in the main app
 app.include_router(api_router)
 
@@ -1009,5 +1306,8 @@ logger = logging.getLogger(__name__)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    global _scheduler
+    if _scheduler:
+        _scheduler.stop()
     if client is not None:
         client.close()
