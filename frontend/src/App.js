@@ -29,6 +29,8 @@ import IsraeliBank from "./pages/IsraeliBank";
 import WoobBanks from "./pages/WoobBanks";
 import OnboardingPage from "./pages/OnboardingPage";
 import { QuickEntryFAB, QuickEntryDrawer } from "./pages/QuickEntry";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import CookieConsentBanner from "./components/CookieConsentBanner";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
 const API = `${BACKEND_URL}/api`;
@@ -624,9 +626,10 @@ function App() {
               {/* Onboarding route — always accessible */}
               <Route path="/onboarding" element={<OnboardingPage />} />
 
-              {/* Exempt routes that should work regardless of onboarding */}
+              {/* Always-accessible routes */}
               <Route path="/profile" element={<Profile />} />
               <Route path="/widget" element={<WidgetPage />} />
+              <Route path="/privacy-policy" element={<PrivacyPolicy />} />
 
               {onboardingCompleted ? (
                 <>
@@ -665,6 +668,16 @@ function App() {
               />
             </>
           )}
+
+          {/* GDPR consent banner — shown until user makes a choice */}
+          <CookieConsentBanner />
+
+          {/* Minimal footer with Privacy Policy link */}
+          <footer className="mt-auto py-4 text-center text-xs text-stone-400">
+            <NavLink to="/privacy-policy" className="hover:text-stone-600 underline">
+              Politique de confidentialité
+            </NavLink>
+          </footer>
         </BrowserRouter>
         <Toaster 
           position="bottom-right" 
