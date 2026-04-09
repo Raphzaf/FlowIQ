@@ -625,9 +625,53 @@ const QuickInsights = ({ insights, loading }) => {
   );
 };
 
+// Empty state shown when user has no transactions yet
+const DashboardEmptyState = () => (
+  <div
+    className="col-span-full flex flex-col items-center justify-center py-20 text-center animate-fade-in-up"
+    data-testid="dashboard-empty-state"
+  >
+    <div className="w-20 h-20 rounded-3xl bg-stone-100 flex items-center justify-center mb-6">
+      <Wallet className="w-10 h-10 text-stone-300" />
+    </div>
+    <h2 className="font-heading text-2xl font-bold text-stone-900 mb-2">
+      No transactions yet
+    </h2>
+    <p className="text-stone-500 mb-8 max-w-sm">
+      Import a CSV or connect a bank to start seeing your financial insights here.
+    </p>
+    <div className="flex flex-col sm:flex-row gap-3">
+      <Link
+        to="/upload"
+        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-stone-900 text-white font-medium hover:bg-stone-800 transition-colors text-sm"
+        data-testid="empty-goto-upload"
+      >
+        <ArrowRight className="w-4 h-4" />
+        Import CSV
+      </Link>
+      <Link
+        to="/banks"
+        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-stone-200 text-stone-700 font-medium hover:bg-stone-50 transition-colors text-sm"
+        data-testid="empty-goto-banks"
+      >
+        Connect a bank
+      </Link>
+      <Link
+        to="/onboarding"
+        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-stone-200 text-stone-700 font-medium hover:bg-stone-50 transition-colors text-sm"
+        data-testid="empty-goto-onboarding"
+      >
+        Resume setup
+      </Link>
+    </div>
+  </div>
+);
+
 // Main Dashboard Component
 const Dashboard = () => {
-  const { dashboardData, insights, cashflow, loading } = useApi();
+  const { dashboardData, insights, cashflow, transactions, loading } = useApi();
+
+  const hasTransactions = transactions && transactions.length > 0;
 
   return (
     <div data-testid="dashboard-page">
@@ -645,21 +689,28 @@ const Dashboard = () => {
       <div className="grid grid-cols-12 gap-5 lg:gap-6">
         {/* Install App Banner */}
         <InstallAppBanner />
-        
-        {/* Hero Balance Card - Spans 8 cols */}
-        <HeroBalanceCard data={dashboardData} loading={loading} />
-        
-        {/* Cashflow Prediction - Spans 4 cols */}
-        <CashflowCard cashflow={cashflow} loading={loading} />
-        
-        {/* Monthly Spending Chart - Spans 8 cols */}
-        <SpendingChart data={dashboardData} loading={loading} />
-        
-        {/* Category Breakdown - Spans 4 cols */}
-        <CategoryChart data={dashboardData} loading={loading} />
-        
-        {/* Quick Insights - Full width */}
-        <QuickInsights insights={insights} loading={loading} />
+
+        {/* Show empty state if no transactions and not loading */}
+        {!loading && !hasTransactions ? (
+          <DashboardEmptyState />
+        ) : (
+          <>
+            {/* Hero Balance Card - Spans 8 cols */}
+            <HeroBalanceCard data={dashboardData} loading={loading} />
+            
+            {/* Cashflow Prediction - Spans 4 cols */}
+            <CashflowCard cashflow={cashflow} loading={loading} />
+            
+            {/* Monthly Spending Chart - Spans 8 cols */}
+            <SpendingChart data={dashboardData} loading={loading} />
+            
+            {/* Category Breakdown - Spans 4 cols */}
+            <CategoryChart data={dashboardData} loading={loading} />
+            
+            {/* Quick Insights - Full width */}
+            <QuickInsights insights={insights} loading={loading} />
+          </>
+        )}
       </div>
     </div>
   );
