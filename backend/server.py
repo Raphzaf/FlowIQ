@@ -5,6 +5,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from supabase import create_client
 import os
 import logging
+import asyncio
 from pathlib import Path
 import base64
 import json
@@ -22,6 +23,13 @@ from insights_engine import generate_insights
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+
+# Configure logging early so subsequent module-level code can use it
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 
 def _env(name: str) -> Optional[str]:
@@ -1269,6 +1277,386 @@ async def manual_sync(
 
 
 # ---------------------------------------------------------------------------
+# Woob Bank Integration endpoints
+# ---------------------------------------------------------------------------
+
+try:
+    from integrations.woob.registry import get_supported_banks as _get_woob_banks
+    from integrations.woob.connector import WoobBankConnector
+    _WOOB_AVAILABLE = True
+except Exception as _woob_import_err:
+    logger.warning("Woob integration unavailable: %s", _woob_import_err)
+    _WOOB_AVAILABLE = False
+
+    def _get_woob_banks():
+        return {}
+
+    class WoobBankConnector:  # type: ignore[no-redef]
+        def __init__(self, bank_id: str) -> None:
+            raise RuntimeError("Woob is not installed")
+
+
+class WoobConnectRequest(BaseModel):
+    bank_id: str
+    login: str
+    password: str
+
+
+class WoobSyncResponse(BaseModel):
+    bank_id: str
+    account_count: int
+    transaction_count: int
+    synced_at: str
+
+
+# ---------------------------------------------------------------------------
+# DB helpers – Woob bank connections (reuse same table with connector_type)
+# ---------------------------------------------------------------------------
+
+async def db_get_woob_connections(user_id: str) -> List[Dict[str, Any]]:
+    """Return all Woob-type bank connections for *user_id*."""
+    all_conn = await db_get_bank_connections(user_id)
+    return [c for c in all_conn if c.get("connector_type") == "woob"]
+
+
+async def db_get_all_active_woob_connections() -> List[Dict[str, Any]]:
+    if use_supabase:
+        response = (
+            supabase.table("bank_connections")
+            .select("*")
+            .eq("status", "connected")
+            .eq("connector_type", "woob")
+            .execute()
+        )
+        return response.data or []
+    return await db.bank_connections.find(
+        {"status": "connected", "connector_type": "woob"}, {"_id": 0}
+    ).to_list(1000)
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+
+@api_router.get("/banks/woob/supported")
+async def woob_list_supported_banks():
+    """Return metadata for all supported Woob bank modules."""
+    banks = _get_woob_banks()
+    return list(banks.values())
+
+
+@api_router.get("/banks/woob/connections")
+async def woob_get_connections(
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    """List the current user's Woob bank connections (credentials not returned)."""
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    connections = await db_get_woob_connections(user_id)
+    safe = [{k: v for k, v in c.items() if k != "encrypted_credentials"} for c in connections]
+    return safe
+
+
+@api_router.post("/banks/woob/connect")
+async def woob_connect_bank(
+    payload: WoobConnectRequest,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    """Connect to a Woob-supported bank and perform the initial sync."""
+    if not _WOOB_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Woob integration is not available on this server")
+
+    user_id = await _resolve_user_id(x_user_id, authorization)
+
+    supported = _get_woob_banks()
+    if payload.bank_id not in supported:
+        raise HTTPException(status_code=400, detail=f"Unsupported Woob bank: {payload.bank_id}")
+
+    credentials = {"login": payload.login, "password": payload.password}
+
+    try:
+        connector = WoobBankConnector(payload.bank_id)
+        session = await asyncio.to_thread(connector.login, credentials)
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Connection failed: {exc}")
+
+    try:
+        accounts = await asyncio.to_thread(connector.fetch_accounts, session)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch accounts: {exc}")
+
+    await asyncio.to_thread(connector.logout, session)
+
+    bank_meta = supported[payload.bank_id]
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{user_id}:woob:{payload.bank_id}"))
+
+    conn_record = {
+        "id": conn_id,
+        "user_id": user_id,
+        "bank_id": payload.bank_id,
+        "bank_name": bank_meta.get("name", payload.bank_id),
+        "connector_type": "woob",
+        "status": "connected",
+        "encrypted_credentials": encrypt_credentials(credentials),
+        "accounts": [normalize_account(a) for a in accounts],
+        "last_synced_at": None,
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+
+    await db_upsert_bank_connection(conn_record)
+    return {k: v for k, v in conn_record.items() if k != "encrypted_credentials"}
+
+
+@api_router.post("/banks/woob/disconnect")
+async def woob_disconnect_bank(
+    payload: Dict[str, str],
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    """Remove a Woob bank connection."""
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    bank_id = payload.get("bank_id", "")
+    conn_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{user_id}:woob:{bank_id}"))
+    deleted = await db_delete_bank_connection(conn_id, user_id)
+    if deleted == 0:
+        raise HTTPException(status_code=404, detail="Connection not found")
+    return {"message": f"Disconnected from {bank_id}"}
+
+
+@api_router.get("/banks/woob/accounts")
+async def woob_get_accounts(
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    """Return all bank accounts across all connected Woob institutions."""
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    connections = await db_get_woob_connections(user_id)
+    all_accounts = []
+    for conn in connections:
+        if conn.get("status") != "connected":
+            continue
+        for acc in conn.get("accounts", []):
+            all_accounts.append({**acc, "bank_name": conn.get("bank_name", conn.get("bank_id"))})
+    return all_accounts
+
+
+@api_router.post("/banks/woob/sync", response_model=WoobSyncResponse)
+async def woob_manual_sync(
+    payload: Dict[str, str],
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    """Manually trigger a transaction sync for a specific Woob bank connection."""
+    if not _WOOB_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Woob integration is not available on this server")
+
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    bank_id = payload.get("bank_id", "")
+    conn_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{user_id}:woob:{bank_id}"))
+
+    connections = await db_get_woob_connections(user_id)
+    conn = next((c for c in connections if c.get("id") == conn_id), None)
+    if not conn:
+        raise HTTPException(status_code=404, detail="Woob bank connection not found")
+
+    try:
+        creds = decrypt_credentials(conn["encrypted_credentials"])
+        connector = WoobBankConnector(bank_id)
+        session = await asyncio.to_thread(connector.login, creds)
+        accounts = await asyncio.to_thread(connector.fetch_accounts, session)
+
+        last_synced_at = conn.get("last_synced_at")
+        from_date = (
+            datetime.fromisoformat(last_synced_at).date()
+            if last_synced_at
+            else (datetime.now(timezone.utc) - timedelta(days=30)).date()
+        )
+        to_date = datetime.now(timezone.utc).date()
+
+        all_txs: List[Dict[str, Any]] = []
+        for account in accounts:
+            raw_txs = await asyncio.to_thread(
+                connector.fetch_transactions, session, account.account_id, from_date, to_date
+            )
+            for raw in raw_txs:
+                normalized = normalize_transaction(
+                    raw, user_id=user_id, source_label=f"Woob – {bank_id}"
+                )
+                all_txs.append(normalized)
+
+        await asyncio.to_thread(connector.logout, session)
+
+        if all_txs:
+            await db_upsert_transactions_by_external_id(all_txs)
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        conn["last_synced_at"] = now_iso
+        conn["updated_at"] = now_iso
+        conn["accounts"] = [normalize_account(a) for a in accounts]
+        await db_upsert_bank_connection(conn)
+
+        return WoobSyncResponse(
+            bank_id=bank_id,
+            account_count=len(accounts),
+            transaction_count=len(all_txs),
+            synced_at=now_iso,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Woob sync failed: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Cross-connector cron sync endpoint
+# Designed to be called by Vercel Cron (or any scheduler).
+# Protected by CRON_SECRET env var when set.
+# ---------------------------------------------------------------------------
+
+@api_router.post("/banks/sync-all")
+async def sync_all_banks(
+    x_cron_secret: Optional[str] = Header(None, alias="X-Cron-Secret"),
+):
+    """
+    Sync all active bank connections (Israeli + Woob) for all users.
+
+    Intended for use with Vercel Cron or a similar scheduler.
+    When the ``CRON_SECRET`` environment variable is set, the request must
+    include an ``X-Cron-Secret`` header with the matching value.
+    """
+    expected_secret = os.environ.get("CRON_SECRET", "")
+    if expected_secret and x_cron_secret != expected_secret:
+        raise HTTPException(status_code=401, detail="Invalid or missing X-Cron-Secret")
+
+    results: Dict[str, Any] = {"israel": [], "woob": [], "errors": []}
+
+    # ── Israeli bank connections ──────────────────────────────────────────
+    try:
+        israel_connections = await db_get_all_active_bank_connections()
+    except Exception as exc:
+        results["errors"].append(f"Failed to load Israeli connections: {exc}")
+        israel_connections = []
+
+    for conn in israel_connections:
+        if conn.get("connector_type") == "woob":
+            continue  # handled below
+        bank_id = conn.get("bank_id", "")
+        ConnectorCls = _BANK_CONNECTORS.get(bank_id)
+        if ConnectorCls is None:
+            continue
+        user_id = conn.get("user_id", "")
+        try:
+            creds = decrypt_credentials(conn["encrypted_credentials"])
+            connector = ConnectorCls()
+            session = await asyncio.to_thread(connector.login, creds)
+            accounts = await asyncio.to_thread(connector.fetch_accounts, session)
+
+            last_synced_at = conn.get("last_synced_at")
+            from_date = (
+                datetime.fromisoformat(last_synced_at).date()
+                if last_synced_at
+                else (datetime.now(timezone.utc) - timedelta(days=30)).date()
+            )
+            to_date = datetime.now(timezone.utc).date()
+
+            all_txs: List[Dict[str, Any]] = []
+            for account in accounts:
+                raw_txs = await asyncio.to_thread(
+                    connector.fetch_transactions, session, account.account_id, from_date, to_date
+                )
+                for raw in raw_txs:
+                    all_txs.append(
+                        normalize_transaction(raw, user_id=user_id, source_label=f"Israel Bank – {bank_id}")
+                    )
+
+            await asyncio.to_thread(connector.logout, session)
+
+            if all_txs:
+                await db_upsert_transactions_by_external_id(all_txs)
+
+            now_iso = datetime.now(timezone.utc).isoformat()
+            conn["last_synced_at"] = now_iso
+            conn["updated_at"] = now_iso
+            await db_upsert_bank_connection(conn)
+
+            results["israel"].append({
+                "bank_id": bank_id,
+                "user_id": user_id,
+                "transactions": len(all_txs),
+                "status": "ok",
+            })
+        except Exception as exc:
+            results["errors"].append(f"Israel/{bank_id}/{user_id}: {exc}")
+            results["israel"].append({"bank_id": bank_id, "user_id": user_id, "status": "error", "error": str(exc)})
+
+    # ── Woob bank connections ─────────────────────────────────────────────
+    if _WOOB_AVAILABLE:
+        try:
+            woob_connections = await db_get_all_active_woob_connections()
+        except Exception as exc:
+            results["errors"].append(f"Failed to load Woob connections: {exc}")
+            woob_connections = []
+
+        for conn in woob_connections:
+            bank_id = conn.get("bank_id", "")
+            user_id = conn.get("user_id", "")
+            try:
+                creds = decrypt_credentials(conn["encrypted_credentials"])
+                connector = WoobBankConnector(bank_id)
+                session = await asyncio.to_thread(connector.login, creds)
+                accounts = await asyncio.to_thread(connector.fetch_accounts, session)
+
+                last_synced_at = conn.get("last_synced_at")
+                from_date = (
+                    datetime.fromisoformat(last_synced_at).date()
+                    if last_synced_at
+                    else (datetime.now(timezone.utc) - timedelta(days=30)).date()
+                )
+                to_date = datetime.now(timezone.utc).date()
+
+                all_txs: List[Dict[str, Any]] = []
+                for account in accounts:
+                    raw_txs = await asyncio.to_thread(
+                        connector.fetch_transactions, session, account.account_id, from_date, to_date
+                    )
+                    for raw in raw_txs:
+                        all_txs.append(
+                            normalize_transaction(raw, user_id=user_id, source_label=f"Woob – {bank_id}")
+                        )
+
+                await asyncio.to_thread(connector.logout, session)
+
+                if all_txs:
+                    await db_upsert_transactions_by_external_id(all_txs)
+
+                now_iso = datetime.now(timezone.utc).isoformat()
+                conn["last_synced_at"] = now_iso
+                conn["updated_at"] = now_iso
+                conn["accounts"] = [normalize_account(a) for a in accounts]
+                await db_upsert_bank_connection(conn)
+
+                results["woob"].append({
+                    "bank_id": bank_id,
+                    "user_id": user_id,
+                    "transactions": len(all_txs),
+                    "status": "ok",
+                })
+            except Exception as exc:
+                results["errors"].append(f"Woob/{bank_id}/{user_id}: {exc}")
+                results["woob"].append({"bank_id": bank_id, "user_id": user_id, "status": "error", "error": str(exc)})
+
+    results["synced_at"] = datetime.now(timezone.utc).isoformat()
+    return results
+
+
+# ---------------------------------------------------------------------------
 # Scheduler – started at app startup
 # ---------------------------------------------------------------------------
 
@@ -1296,13 +1684,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

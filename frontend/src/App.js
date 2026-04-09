@@ -26,6 +26,7 @@ import Transactions from "./pages/Transactions";
 import WidgetPage from "./pages/WidgetPage";
 import Profile from "./pages/Profile";
 import IsraeliBank from "./pages/IsraeliBank";
+import WoobBanks from "./pages/WoobBanks";
 import { QuickEntryFAB, QuickEntryDrawer } from "./pages/QuickEntry";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
@@ -56,7 +57,8 @@ const Navigation = ({ onSignOut }) => {
     { path: "/insights", label: "Insights", icon: Lightbulb },
     { path: "/transactions", label: "History", icon: History },
     { path: "/upload", label: "Upload", icon: Upload },
-    { path: "/banks", label: "Banks", icon: Building2 },
+    { path: "/banks", label: "IL Banks", icon: Building2 },
+    { path: "/banks/woob", label: "EU Banks", icon: Building2 },
     { path: "/profile", label: "Profile", icon: User },
   ];
 
@@ -622,6 +624,7 @@ function App() {
               <Route path="/transactions" element={<Transactions />} />
               <Route path="/upload" element={<UploadPage />} />
               <Route path="/banks" element={<IsraeliBank />} />
+              <Route path="/banks/woob" element={<WoobBanks />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/widget" element={<WidgetPage />} />
             </Routes>

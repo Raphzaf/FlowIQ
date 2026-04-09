@@ -1,0 +1,1 @@
+# Woob bank integration package
