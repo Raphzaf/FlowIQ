@@ -39,6 +39,45 @@ Instead, it will copy all the configuration files and the transitive dependencie
 
 You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
 
+## PWA / Offline Support
+
+FlowIQ ships a minimal service worker (`public/sw.js`) that provides a
+**cache-first offline experience** for the app shell (HTML, JS bundle, CSS,
+icons, manifest).
+
+### How it works
+
+| Request type | Strategy | Reason |
+|---|---|---|
+| Static / app shell assets | Cache-first | Fast loads; assets are fingerprinted per build |
+| `/api/*` calls | Network-first | Always fetch fresh data; returns `{"error":"offline"}` (HTTP 503) when offline |
+| HTML navigation (offline) | Cache fallback → `/index.html` | Keeps the React SPA router alive even without a network |
+
+Non-GET requests and cross-origin requests are never intercepted.
+
+### Bumping the cache version
+
+When you need to force all clients to re-download the app shell (e.g. after a
+major layout change or icon update), increment the version string in
+`public/sw.js`:
+
+```js
+const CACHE_NAME = 'flowiq-shell-v2'; // ← bump this
+```
+
+Then redeploy. The `activate` handler automatically deletes all caches whose
+name no longer matches `CACHE_NAME`.
+
+### Limitations (beta)
+
+- The JS/CSS bundles are **not** pre-cached during `install` (their filenames
+  are hashed by Webpack and unknown at build time). They are cached
+  **on first request** and served from cache thereafter.
+- API responses are never cached — any page that relies solely on live API data
+  will show an error state when offline.
+- The service worker is **only registered in production** (`NODE_ENV=production`).
+  Development builds are unaffected.
+
 ## Learn More
 
 You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).

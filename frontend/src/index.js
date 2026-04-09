@@ -9,3 +9,14 @@ root.render(
     <App />
   </React.StrictMode>,
 );
+
+// Register the service worker in production to enable offline / PWA support.
+if (process.env.NODE_ENV === "production" && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("/sw.js")
+      .catch(() => {
+        // SW registration failed — app still works without it.
+      });
+  });
+}
