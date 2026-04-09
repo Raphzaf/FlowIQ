@@ -31,6 +31,7 @@
     -->
 
         <script>
+            /* PostHog stub — actual init happens only after GDPR consent (see CookieConsentBanner) */
             !(function (t, e) {
                 var o, n, p, r;
                 e.__SV ||
@@ -92,14 +93,8 @@
                     }),
                     (e.__SV = 1));
             })(document, window.posthog || []);
-            posthog.init("phc_xAvL2Iq4tFmANRE7kzbKwaSqp1HJjN7x48s3vr0CMjs", {
-                api_host: "https://us.i.posthog.com",
-                person_profiles: "identified_only", // or 'always' to create profiles for anonymous users as well,
-                session_recording: {
-                    recordCrossOriginIframes: true,
-                    capturePerformance: false,
-                },
-            });
+            /* posthog.init() is intentionally NOT called here.
+               It is called by CookieConsentBanner only after the user accepts analytics. */
         </script>
     </body>
 </html>
