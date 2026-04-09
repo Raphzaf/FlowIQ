@@ -20,6 +20,8 @@ import calendar
 
 # Import insights engine
 from insights_engine import generate_insights
+from middleware.cron_auth import validate_cron_secret
+from middleware.rate_limit import RateLimitMiddleware
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -1581,9 +1583,7 @@ async def sync_all_banks(
     When the ``CRON_SECRET`` environment variable is set, the request must
     include an ``X-Cron-Secret`` header with the matching value.
     """
-    expected_secret = os.environ.get("CRON_SECRET", "")
-    if expected_secret and x_cron_secret != expected_secret:
-        raise HTTPException(status_code=401, detail="Invalid or missing X-Cron-Secret")
+    validate_cron_secret(x_cron_secret)
 
     results: Dict[str, Any] = {"israel": [], "woob": [], "errors": []}
 
@@ -1724,13 +1724,38 @@ async def startup_bank_scheduler():
     _scheduler.start()
 
 
+def _build_cors_origins() -> list:
+    """Parse CORS_ORIGINS; in production fail fast if not configured properly."""
+    raw = os.environ.get("CORS_ORIGINS", "").strip()
+    is_prod = (
+        os.environ.get("ENV") == "production"
+        or os.environ.get("NODE_ENV") == "production"
+        or os.environ.get("APP_ENV") == "production"
+    )
+
+    if is_prod:
+        if not raw:
+            raise RuntimeError("CORS_ORIGINS must be set in production")
+        origins = [o.strip() for o in raw.split(",") if o.strip()]
+        if not origins or "*" in origins:
+            raise RuntimeError("CORS_ORIGINS must not be empty or contain '*' in production")
+        return origins
+
+    # Dev/staging: fall back to wildcard if not set
+    if not raw:
+        return ["*"]
+    return [o.strip() for o in raw.split(",") if o.strip()]
+
+
 # Include the router in the main app
 app.include_router(api_router)
+
+app.add_middleware(RateLimitMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=_build_cors_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )
