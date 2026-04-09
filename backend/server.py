@@ -21,6 +21,9 @@ import calendar
 # Import insights engine
 from insights_engine import generate_insights
 
+from middleware.cron_auth import verify_cron_secret
+from middleware.rate_limit import RateLimitMiddleware
+
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
@@ -1578,12 +1581,10 @@ async def sync_all_banks(
     Sync all active bank connections (Israeli + Woob) for all users.
 
     Intended for use with Vercel Cron or a similar scheduler.
-    When the ``CRON_SECRET`` environment variable is set, the request must
-    include an ``X-Cron-Secret`` header with the matching value.
+    Requires ``CRON_SECRET`` env var in production; checked via
+    ``X-Cron-Secret`` header using constant-time comparison.
     """
-    expected_secret = os.environ.get("CRON_SECRET", "")
-    if expected_secret and x_cron_secret != expected_secret:
-        raise HTTPException(status_code=401, detail="Invalid or missing X-Cron-Secret")
+    verify_cron_secret(x_cron_secret)
 
     results: Dict[str, Any] = {"israel": [], "woob": [], "errors": []}
 
@@ -1727,13 +1728,36 @@ async def startup_bank_scheduler():
 # Include the router in the main app
 app.include_router(api_router)
 
+def _build_cors_origins() -> list[str]:
+    """Parse CORS_ORIGINS; enforce no-wildcard rule in production."""
+    raw = os.environ.get("CORS_ORIGINS", "").strip()
+    origins = [o.strip() for o in raw.split(",") if o.strip()]
+
+    prod = any(
+        os.environ.get(v, "").strip().lower() == "production"
+        for v in ("ENV", "NODE_ENV", "APP_ENV")
+    )
+
+    if prod:
+        if not origins:
+            raise RuntimeError("CORS_ORIGINS must be set in production")
+        if "*" in origins:
+            raise RuntimeError("CORS_ORIGINS must not contain '*' in production")
+        return origins
+
+    # dev/staging: fall back to wildcard if nothing configured
+    return origins if origins else ["*"]
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=_build_cors_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(RateLimitMiddleware)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
