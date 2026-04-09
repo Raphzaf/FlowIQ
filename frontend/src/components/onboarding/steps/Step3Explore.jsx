@@ -15,19 +15,16 @@ const Step3Explore = ({ onBack, onComplete, loading }) => {
       icon: LayoutDashboard,
       title: "Dashboard",
       desc: "See your balance, spending trends, and month-end forecast.",
-      href: "/",
     },
     {
       icon: Lightbulb,
       title: "Insights",
       desc: "AI-powered analysis of your financial habits and opportunities.",
-      href: "/insights",
     },
     {
       icon: Sparkles,
       title: "Quick Entry",
       desc: "Log cash transactions in seconds from any page.",
-      href: null,
     },
   ];
 
@@ -49,7 +46,7 @@ const Step3Explore = ({ onBack, onComplete, loading }) => {
 
         {/* Feature highlights */}
         <div className="space-y-2">
-          {features.map(({ icon: Icon, title, desc, href }) => (
+          {features.map(({ icon: Icon, title, desc }) => (
             <div
               key={title}
               className="flex items-start gap-3 p-3.5 rounded-xl bg-stone-50 hover:bg-stone-100 transition-colors"

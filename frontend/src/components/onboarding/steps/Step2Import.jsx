@@ -57,7 +57,7 @@ const Step2Import = ({ onNext, onBack, loading }) => {
     }
   };
 
-  const canContinue = uploadResult?.success || true; // Allow skipping
+  const canContinue = uploadResult?.success;
 
   return (
     <StepLayout
@@ -243,7 +243,7 @@ const Step2Import = ({ onNext, onBack, loading }) => {
               "Saving..."
             ) : (
               <>
-                {uploadResult?.success ? "Continue" : "Skip for now"}
+                {canContinue ? "Continue" : "Skip for now"}
                 <ChevronRight className="w-4 h-4" />
               </>
             )}
