@@ -240,3 +240,71 @@ def normalize_account(account: BankAccount) -> Dict[str, Any]:
         "currency": account.currency,
         "name": account.name or account.account_number,
     }
+
+
+# ---------------------------------------------------------------------------
+# Scraper-service normalisation helpers
+# ---------------------------------------------------------------------------
+
+
+def normalize_scraper_account(account: Dict[str, Any], bank_id: str) -> Dict[str, Any]:
+    """Convert a scraper-service account dict to FlowIQ's account format."""
+    account_number = account.get("accountNumber", "unknown")
+    return {
+        "account_id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"{bank_id}:{account_number}")),
+        "account_number": account_number,
+        "bank_id": bank_id,
+        "balance": round(float(account.get("balance") or 0), 2),
+        "currency": "ILS",
+        "name": account_number,
+    }
+
+
+def normalize_scraper_transaction(
+    txn: Dict[str, Any],
+    account_number: str,
+    bank_id: str,
+    user_id: str,
+) -> Optional[Dict[str, Any]]:
+    """Convert a scraper-service transaction dict to FlowIQ's transaction format.
+
+    The scraper returns transactions in the ``israeli-bank-scrapers`` shape:
+    ``{identifier, date, processedDate, originalAmount, originalCurrency,
+    chargedAmount, chargedCurrency, description, memo, status, type, category}``.
+    """
+    charged_amount = txn.get("chargedAmount") or txn.get("originalAmount") or 0
+    try:
+        amount = float(charged_amount)
+    except (TypeError, ValueError):
+        return None
+
+    description = str(txn.get("description") or "Unknown")
+    tx_date = txn.get("date") or txn.get("processedDate") or ""
+    if not tx_date:
+        from datetime import datetime, timezone
+        tx_date = datetime.now(timezone.utc).date().isoformat()
+    # Trim ISO timestamp to date-only if needed
+    if "T" in tx_date:
+        tx_date = tx_date[:10]
+
+    identifier = str(txn.get("identifier") or "")
+    external_id_raw = f"{bank_id}:{account_number}:{tx_date}:{identifier}:{amount}"
+
+    tx_type = "income" if amount >= 0 else "expense"
+    abs_amount = round(abs(amount), 2)
+    currency = txn.get("chargedCurrency") or txn.get("originalCurrency") or "ILS"
+    category = _guess_category(description, txn.get("category"))
+    ext_uuid = str(uuid.uuid5(uuid.NAMESPACE_URL, external_id_raw))
+
+    return {
+        "id": ext_uuid,
+        "date": tx_date,
+        "amount": abs_amount,
+        "category": category,
+        "merchant": description[:100],
+        "type": tx_type,
+        "user_id": user_id,
+        "source": f"Israel Bank – {bank_id}",
+        "currency": currency,
+        "external_id": ext_uuid,
+    }

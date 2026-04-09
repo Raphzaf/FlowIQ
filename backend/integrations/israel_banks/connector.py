@@ -17,29 +17,99 @@ logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Supported bank registry
+# Mirrors the MVP institution set exposed by the Node.js scraper microservice.
 # ---------------------------------------------------------------------------
 
-SUPPORTED_BANKS: Dict[str, Dict[str, str]] = {
+SUPPORTED_BANKS: Dict[str, Dict[str, Any]] = {
     "hapoalim": {
         "name": "Bank Hapoalim",
         "name_he": "בנק הפועלים",
         "logo": "https://upload.wikimedia.org/wikipedia/he/thumb/a/a8/Bank_Hapoalim_Logo.svg/200px-Bank_Hapoalim_Logo.svg.png",
-        "requires_otp": False,
+        "login_fields": ["userCode", "password"],
+        "requires_otp": True,
+        "type": "bank",
         "website": "https://www.bankhapoalim.co.il",
     },
     "leumi": {
         "name": "Bank Leumi",
         "name_he": "בנק לאומי",
         "logo": "https://upload.wikimedia.org/wikipedia/he/thumb/2/2e/Bank_Leumi_logo.svg/200px-Bank_Leumi_logo.svg.png",
+        "login_fields": ["username", "password"],
         "requires_otp": False,
+        "type": "bank",
         "website": "https://www.leumi.co.il",
     },
     "discount": {
-        "name": "Bank Discount",
+        "name": "Discount Bank",
         "name_he": "בנק דיסקונט",
         "logo": "https://upload.wikimedia.org/wikipedia/he/thumb/5/5b/Discount_Bank_Logo.svg/200px-Discount_Bank_Logo.svg.png",
+        "login_fields": ["id", "password", "num"],
         "requires_otp": False,
+        "type": "bank",
         "website": "https://www.discountbank.co.il",
+    },
+    "mizrahi": {
+        "name": "Mizrahi Bank",
+        "name_he": "בנק מזרחי טפחות",
+        "logo": None,
+        "login_fields": ["username", "password"],
+        "requires_otp": False,
+        "type": "bank",
+        "website": "https://www.mizrahi-tefahot.co.il",
+    },
+    "max": {
+        "name": "Max",
+        "name_he": "מקס",
+        "logo": None,
+        "login_fields": ["username", "password"],
+        "requires_otp": False,
+        "type": "creditcard",
+        "website": "https://www.max.co.il",
+    },
+    "visaCal": {
+        "name": "Visa Cal",
+        "name_he": "ויזה כאל",
+        "logo": None,
+        "login_fields": ["username", "password"],
+        "requires_otp": False,
+        "type": "creditcard",
+        "website": "https://www.cal-online.co.il",
+    },
+    "isracard": {
+        "name": "Isracard",
+        "name_he": "ישראכרט",
+        "logo": None,
+        "login_fields": ["id", "card6Digits", "password"],
+        "requires_otp": False,
+        "type": "creditcard",
+        "website": "https://www.isracard.co.il",
+    },
+    "amex": {
+        "name": "Amex",
+        "name_he": "אמריקן אקספרס",
+        "logo": None,
+        "login_fields": ["id", "card6Digits", "password"],
+        "requires_otp": False,
+        "type": "creditcard",
+        "website": "https://www.isracard.co.il",
+    },
+    "beinleumi": {
+        "name": "Beinleumi",
+        "name_he": "הבנק הבינלאומי",
+        "logo": None,
+        "login_fields": ["username", "password"],
+        "requires_otp": False,
+        "type": "bank",
+        "website": "https://www.fibi.co.il",
+    },
+    "mercantile": {
+        "name": "Mercantile Bank",
+        "name_he": "בנק מרקנטיל",
+        "logo": None,
+        "login_fields": ["id", "password", "num"],
+        "requires_otp": False,
+        "type": "bank",
+        "website": "https://www.mercantile.co.il",
     },
 }
 
