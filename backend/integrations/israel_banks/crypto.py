@@ -3,8 +3,11 @@ Credential encryption helpers.
 
 Credentials are encrypted with AES-256-GCM (Fernet from the cryptography
 library) before being stored in the database.  The key is derived from the
-ISRAEL_BANKS_SECRET_KEY environment variable (or a generated fallback for
-development).
+ISRAEL_BANKS_SECRET_KEY environment variable.
+
+In **production** (ENV/APP_ENV/NODE_ENV == "production") the key is mandatory:
+the server will refuse to start if it is absent, to prevent in-memory key
+generation that would silently invalidate all stored credentials on restart.
 
 Never store the secret key in source control.
 """
@@ -27,6 +30,13 @@ _KEY_ENV = "ISRAEL_BANKS_SECRET_KEY"
 _fernet: Fernet | None = None
 
 
+def _is_production() -> bool:
+    return any(
+        os.environ.get(v, "").strip().lower() == "production"
+        for v in ("ENV", "APP_ENV", "NODE_ENV")
+    )
+
+
 def _get_fernet() -> Fernet:
     global _fernet
     if _fernet is not None:
@@ -34,9 +44,18 @@ def _get_fernet() -> Fernet:
 
     raw_key = os.environ.get(_KEY_ENV, "")
     if not raw_key:
+        if _is_production():
+            raise RuntimeError(
+                f"{_KEY_ENV} is not set. "
+                "This variable is required in production to avoid losing encrypted "
+                "bank credentials on server restart. "
+                "Set it to a long random string (e.g. `openssl rand -base64 32`)."
+            )
         logger.warning(
             "%s is not set. Generating an in-process key. "
-            "Credentials will not survive server restarts.",
+            "Credentials will not survive server restarts. "
+            "Set %s in production.",
+            _KEY_ENV,
             _KEY_ENV,
         )
         raw_key = base64.urlsafe_b64encode(os.urandom(32)).decode()

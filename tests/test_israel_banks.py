@@ -316,9 +316,35 @@ class TestBankSyncScheduler(unittest.IsolatedAsyncioTestCase):
         get_conn = AsyncMock(return_value=[conn])
         upsert = AsyncMock()
 
+        # Mock the scraper service returning one account with one transaction
+        scraper_response = {
+            "accounts": [
+                {
+                    "accountNumber": "12-345-001",
+                    "balance": 1000.0,
+                    "txns": [
+                        {
+                            "identifier": "tx-1",
+                            "date": "2024-01-15",
+                            "processedDate": "2024-01-15",
+                            "originalAmount": -250.0,
+                            "originalCurrency": "ILS",
+                            "chargedAmount": -250.0,
+                            "chargedCurrency": "ILS",
+                            "description": "שופרסל",
+                            "status": "completed",
+                            "type": "normal",
+                        }
+                    ],
+                }
+            ]
+        }
+        call_scraper = AsyncMock(return_value=scraper_response)
+
         scheduler = BankSyncScheduler(
             get_connections=get_conn,
             upsert_transactions=upsert,
+            call_scraper=call_scraper,
         )
         await scheduler._sync_all()
         upsert.assert_called_once()

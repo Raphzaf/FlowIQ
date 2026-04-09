@@ -11,9 +11,49 @@
     {
       "src": "backend/api/index.py",
       "use": "@vercel/python"
+    },
+    {
+      "src": "scraper-service/api/scraper/israel/supported.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "scraper-service/api/scraper/israel/login.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "scraper-service/api/scraper/israel/otp.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "scraper-service/api/scraper/israel/accounts.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "scraper-service/api/scraper/israel/transactions.js",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
+    {
+      "src": "/api/scraper/israel/supported",
+      "dest": "scraper-service/api/scraper/israel/supported.js"
+    },
+    {
+      "src": "/api/scraper/israel/login",
+      "dest": "scraper-service/api/scraper/israel/login.js"
+    },
+    {
+      "src": "/api/scraper/israel/otp",
+      "dest": "scraper-service/api/scraper/israel/otp.js"
+    },
+    {
+      "src": "/api/scraper/israel/accounts",
+      "dest": "scraper-service/api/scraper/israel/accounts.js"
+    },
+    {
+      "src": "/api/scraper/israel/transactions",
+      "dest": "scraper-service/api/scraper/israel/transactions.js"
+    },
     {
       "src": "/api/(.*)",
       "dest": "backend/api/index.py"

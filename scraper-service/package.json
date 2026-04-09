@@ -1,0 +1,13 @@
+{
+  "name": "flowiq-scraper-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FlowIQ Node.js microservice wrapping israeli-bank-scrapers, deployed as Vercel Functions",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@sparticuz/chromium": "^131.0.0",
+    "israeli-bank-scrapers": "^6.7.3"
+  }
+}

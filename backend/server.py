@@ -1054,17 +1054,92 @@ async def upload_csv(
 # Israeli Bank Integration endpoints
 # ---------------------------------------------------------------------------
 
+import hmac
+import httpx
+
 from integrations.israel_banks.connector import SUPPORTED_BANKS
-from integrations.israel_banks.connectors import HapoalimConnector, LeumiConnector, DiscountConnector
 from integrations.israel_banks.crypto import encrypt_credentials, decrypt_credentials
 from integrations.israel_banks.normalizer import normalize_transaction, normalize_account
 from integrations.israel_banks.scheduler import BankSyncScheduler
 
-_BANK_CONNECTORS = {
-    "hapoalim": HapoalimConnector,
-    "leumi": LeumiConnector,
-    "discount": DiscountConnector,
-}
+
+def _get_scraper_service_url() -> str:
+    """Return the base URL of the Node.js scraper microservice.
+
+    Priority:
+    1. SCRAPER_SERVICE_URL env var (explicit override)
+    2. https://{VERCEL_URL} (Vercel auto-injects this in production)
+    3. http://localhost:3001 (local development fallback)
+    """
+    explicit = _env("SCRAPER_SERVICE_URL")
+    if explicit:
+        return explicit.rstrip("/")
+    vercel_url = os.environ.get("VERCEL_URL", "").strip()
+    if vercel_url:
+        return f"https://{vercel_url}"
+    return "http://localhost:3001"
+
+
+def _get_internal_secret() -> str:
+    secret = _env("INTERNAL_API_SECRET")
+    if not secret:
+        raise HTTPException(
+            status_code=503,
+            detail="INTERNAL_API_SECRET is not configured. Bank integration is unavailable.",
+        )
+    return secret
+
+
+async def _call_scraper(endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Call a Node.js scraper microservice endpoint.
+
+    Parameters
+    ----------
+    endpoint:
+        Path segment after ``/api/scraper/israel/``, e.g. ``"login"``.
+    payload:
+        JSON body to send.
+
+    Returns
+    -------
+    Parsed JSON response dict.
+
+    Raises
+    ------
+    HTTPException on HTTP/connection errors or non-2xx responses.
+    """
+    base_url = _get_scraper_service_url()
+    url = f"{base_url}/api/scraper/israel/{endpoint}"
+    secret = _get_internal_secret()
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(
+                url,
+                json=payload,
+                headers={"X-Internal-Secret": secret, "Content-Type": "application/json"},
+            )
+    except httpx.ConnectError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Scraper service unreachable at {url}: {exc}",
+        )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504,
+            detail="Scraper service timed out. Bank scraping can take up to 60 seconds.",
+        )
+
+    if resp.status_code == 403:
+        raise HTTPException(status_code=500, detail="Internal secret mismatch. Check INTERNAL_API_SECRET.")
+    if resp.status_code not in (200, 201):
+        try:
+            detail = resp.json().get("error", resp.text)
+        except Exception:
+            detail = resp.text
+        raise HTTPException(status_code=resp.status_code, detail=f"Scraper error: {detail}")
+
+    return resp.json()
 
 # ---------------------------------------------------------------------------
 # DB helpers – bank connections
@@ -1144,8 +1219,17 @@ async def db_upsert_transactions_by_external_id(transactions: List[Dict[str, Any
 
 class BankConnectRequest(BaseModel):
     bank_id: str
-    username: str
-    password: str
+    # Simple username/password (backward-compatible with existing frontend)
+    username: Optional[str] = None
+    password: Optional[str] = None
+    # Extended credentials dict (takes precedence; required for banks with
+    # non-standard login fields such as discount/isracard/amex)
+    credentials: Optional[Dict[str, str]] = None
+
+
+class BankOtpRequest(BaseModel):
+    bank_id: str
+    otp: str
 
 
 class BankSyncResponse(BaseModel):
@@ -1161,8 +1245,8 @@ class BankSyncResponse(BaseModel):
 
 @api_router.get("/banks/israel/supported")
 async def list_supported_banks():
-    """Return metadata for all supported Israeli banks."""
-    return list(SUPPORTED_BANKS.values())
+    """Return metadata for all supported Israeli banks and credit-card providers."""
+    return [{"id": bank_id, **meta} for bank_id, meta in SUPPORTED_BANKS.items()]
 
 
 @api_router.get("/banks/israel/connections")
@@ -1186,49 +1270,147 @@ async def connect_bank(
     x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
-    """Initiate a connection to an Israeli bank and run the first sync."""
+    """Initiate a connection to an Israeli bank via the scraper microservice."""
     user_id = await _resolve_user_id(x_user_id, authorization)
 
-    if payload.bank_id not in _BANK_CONNECTORS:
+    if payload.bank_id not in SUPPORTED_BANKS:
         raise HTTPException(status_code=400, detail=f"Unsupported bank: {payload.bank_id}")
 
-    ConnectorCls = _BANK_CONNECTORS[payload.bank_id]
-    connector = ConnectorCls()
+    # Build credentials dict from request fields
+    if payload.credentials:
+        credentials = payload.credentials
+    else:
+        # Backward-compatible: simple username/password
+        if not payload.password:
+            raise HTTPException(status_code=400, detail="password is required")
+        credentials = {}
+        if payload.username:
+            credentials["username"] = payload.username
+            credentials["userCode"] = payload.username  # hapoalim alias
+        credentials["password"] = payload.password
 
-    credentials = {"username": payload.username, "password": payload.password}
+    bank_meta = SUPPORTED_BANKS[payload.bank_id]
 
-    try:
-        session = connector.login(credentials)
-    except Exception as exc:
-        raise HTTPException(status_code=401, detail=f"Authentication failed: {exc}")
+    # Call the scraper microservice
+    scraper_result = await _call_scraper("login", {
+        "company_id": payload.bank_id,
+        "credentials": credentials,
+    })
 
-    # Fetch accounts to confirm connection
-    try:
-        accounts = connector.fetch_accounts(session)
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Failed to fetch accounts: {exc}")
+    status = scraper_result.get("status")
+    if status == "otp_required":
+        # Return 202 so the frontend knows to collect OTP
+        return {
+            "status": "otp_required",
+            "bank_id": payload.bank_id,
+            "message": scraper_result.get("message", "OTP required. Call /api/banks/israel/otp with the code."),
+        }
 
-    connector.logout(session)
+    if status == "error":
+        raise HTTPException(
+            status_code=502,
+            detail=f"Bank login failed: {scraper_result.get('errorMessage', scraper_result.get('errorType', 'Unknown error'))}",
+        )
 
+    raw_accounts = scraper_result.get("accounts", [])
     now_iso = datetime.now(timezone.utc).isoformat()
     conn_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{user_id}:{payload.bank_id}"))
+
+    normalized_accounts = [
+        _normalize_scraper_account(acc, payload.bank_id) for acc in raw_accounts
+    ]
 
     conn_record = {
         "id": conn_id,
         "user_id": user_id,
         "bank_id": payload.bank_id,
-        "bank_name": SUPPORTED_BANKS[payload.bank_id]["name"],
+        "bank_name": bank_meta["name"],
+        "connector_type": "israeli-bank-scrapers",
         "status": "connected",
         "encrypted_credentials": encrypt_credentials(credentials),
-        "accounts": [normalize_account(a) for a in accounts],
+        "accounts": normalized_accounts,
         "last_synced_at": None,
         "created_at": now_iso,
         "updated_at": now_iso,
     }
 
     await db_upsert_bank_connection(conn_record)
-
     return {k: v for k, v in conn_record.items() if k != "encrypted_credentials"}
+
+
+@api_router.post("/banks/israel/otp")
+async def complete_bank_otp(
+    payload: BankOtpRequest,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    """Complete an OTP-required bank connection.
+
+    The caller must have previously called /banks/israel/connect and received
+    status="otp_required".  They now provide the OTP code received via SMS/app.
+    The stored credentials (encrypted) are retrieved, combined with the OTP,
+    and passed to the scraper service to complete the login.
+    """
+    user_id = await _resolve_user_id(x_user_id, authorization)
+
+    if payload.bank_id not in SUPPORTED_BANKS:
+        raise HTTPException(status_code=400, detail=f"Unsupported bank: {payload.bank_id}")
+
+    conn_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{user_id}:{payload.bank_id}"))
+    connections = await db_get_bank_connections(user_id)
+    conn = next(
+        (c for c in connections if c.get("id") == conn_id and c.get("bank_id") == payload.bank_id),
+        None,
+    )
+
+    if not conn or not conn.get("encrypted_credentials"):
+        raise HTTPException(
+            status_code=404,
+            detail="No pending connection found. Please call /banks/israel/connect first.",
+        )
+
+    try:
+        credentials = decrypt_credentials(conn["encrypted_credentials"])
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to decrypt credentials: {exc}")
+
+    # Add OTP to credentials
+    credentials["otp"] = payload.otp
+
+    scraper_result = await _call_scraper("otp", {
+        "company_id": payload.bank_id,
+        "credentials": credentials,
+    })
+
+    status = scraper_result.get("status")
+    if status == "error":
+        raise HTTPException(
+            status_code=502,
+            detail=f"OTP verification failed: {scraper_result.get('errorMessage', 'Unknown error')}",
+        )
+
+    raw_accounts = scraper_result.get("accounts", [])
+    now_iso = datetime.now(timezone.utc).isoformat()
+    bank_meta = SUPPORTED_BANKS[payload.bank_id]
+
+    normalized_accounts = [
+        _normalize_scraper_account(acc, payload.bank_id) for acc in raw_accounts
+    ]
+
+    # Remove OTP from stored credentials (don't persist short-lived OTP codes)
+    credentials.pop("otp", None)
+
+    conn.update({
+        "bank_name": bank_meta["name"],
+        "connector_type": "israeli-bank-scrapers",
+        "status": "connected",
+        "encrypted_credentials": encrypt_credentials(credentials),
+        "accounts": normalized_accounts,
+        "updated_at": now_iso,
+    })
+
+    await db_upsert_bank_connection(conn)
+    return {k: v for k, v in conn.items() if k != "encrypted_credentials"}
 
 
 @api_router.post("/banks/israel/disconnect")
@@ -1259,6 +1441,8 @@ async def get_bank_accounts(
     for conn in connections:
         if conn.get("status") != "connected":
             continue
+        if conn.get("connector_type") == "woob":
+            continue  # handled by woob endpoints
         for acc in conn.get("accounts", []):
             all_accounts.append({**acc, "bank_name": conn.get("bank_name", conn.get("bank_id"))})
     return all_accounts
@@ -1280,53 +1464,119 @@ async def manual_sync(
     if not conn:
         raise HTTPException(status_code=404, detail="Bank connection not found")
 
-    ConnectorCls = _BANK_CONNECTORS.get(bank_id)
-    if ConnectorCls is None:
+    if bank_id not in SUPPORTED_BANKS:
         raise HTTPException(status_code=400, detail=f"Unsupported bank: {bank_id}")
 
     try:
         creds = decrypt_credentials(conn["encrypted_credentials"])
-        connector = ConnectorCls()
-        session = connector.login(creds)
-        accounts = connector.fetch_accounts(session)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to decrypt credentials: {exc}")
 
-        last_synced_at = conn.get("last_synced_at")
-        from_date = (
-            datetime.fromisoformat(last_synced_at).date()
-            if last_synced_at
-            else (datetime.now(timezone.utc) - timedelta(days=30)).date()
-        )
-        to_date = datetime.now(timezone.utc).date()
+    last_synced_at = conn.get("last_synced_at")
+    from_date = (
+        datetime.fromisoformat(last_synced_at).date().isoformat()
+        if last_synced_at
+        else (datetime.now(timezone.utc) - timedelta(days=30)).date().isoformat()
+    )
 
-        all_txs: List[Dict[str, Any]] = []
-        for account in accounts:
-            raw_txs = connector.fetch_transactions(session, account.account_id, from_date, to_date)
-            for raw in raw_txs:
-                normalized = normalize_transaction(raw, user_id=user_id, source_label=f"Israel Bank – {bank_id}")
-                all_txs.append(normalized)
-
-        connector.logout(session)
-
-        if all_txs:
-            await db_upsert_transactions_by_external_id(all_txs)
-
-        now_iso = datetime.now(timezone.utc).isoformat()
-        conn["last_synced_at"] = now_iso
-        conn["updated_at"] = now_iso
-        conn["accounts"] = [normalize_account(a) for a in accounts]
-        await db_upsert_bank_connection(conn)
-
-        return BankSyncResponse(
-            bank_id=bank_id,
-            account_count=len(accounts),
-            transaction_count=len(all_txs),
-            synced_at=now_iso,
-        )
-
+    try:
+        scraper_result = await _call_scraper("transactions", {
+            "company_id": bank_id,
+            "credentials": creds,
+            "start_date": from_date,
+        })
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Sync failed: {exc}")
+
+    raw_accounts = scraper_result.get("accounts", [])
+    normalized_accounts = [_normalize_scraper_account(acc, bank_id) for acc in raw_accounts]
+
+    all_txs: List[Dict[str, Any]] = []
+    for account in raw_accounts:
+        acct_num = account.get("accountNumber", "unknown")
+        for txn in account.get("txns", []):
+            normalized = _normalize_scraper_transaction(txn, acct_num, bank_id, user_id)
+            if normalized:
+                all_txs.append(normalized)
+
+    if all_txs:
+        await db_upsert_transactions_by_external_id(all_txs)
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn["last_synced_at"] = now_iso
+    conn["updated_at"] = now_iso
+    conn["accounts"] = normalized_accounts
+    await db_upsert_bank_connection(conn)
+
+    return BankSyncResponse(
+        bank_id=bank_id,
+        account_count=len(raw_accounts),
+        transaction_count=len(all_txs),
+        synced_at=now_iso,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Scraper-result normalisation helpers
+# ---------------------------------------------------------------------------
+
+def _normalize_scraper_account(account: Dict[str, Any], bank_id: str) -> Dict[str, Any]:
+    """Convert a scraper-service account dict to FlowIQ's account format."""
+    account_number = account.get("accountNumber", "unknown")
+    return {
+        "account_id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"{bank_id}:{account_number}")),
+        "account_number": account_number,
+        "bank_id": bank_id,
+        "balance": round(float(account.get("balance") or 0), 2),
+        "currency": "ILS",
+        "name": account_number,
+    }
+
+
+def _normalize_scraper_transaction(
+    txn: Dict[str, Any],
+    account_number: str,
+    bank_id: str,
+    user_id: str,
+) -> Optional[Dict[str, Any]]:
+    """Convert a scraper-service transaction dict to FlowIQ's transaction format."""
+    from integrations.israel_banks.normalizer import _guess_category
+
+    charged_amount = txn.get("chargedAmount") or txn.get("originalAmount") or 0
+    try:
+        amount = float(charged_amount)
+    except (TypeError, ValueError):
+        return None
+
+    description = str(txn.get("description") or "Unknown")
+    tx_date = txn.get("date") or txn.get("processedDate") or datetime.now(timezone.utc).date().isoformat()
+    # Trim ISO timestamp to date-only if needed
+    if "T" in tx_date:
+        tx_date = tx_date[:10]
+
+    identifier = txn.get("identifier") or ""
+    external_id = f"{bank_id}:{account_number}:{tx_date}:{identifier}:{amount}"
+
+    tx_type = "income" if amount >= 0 else "expense"
+    abs_amount = round(abs(amount), 2)
+
+    currency = txn.get("chargedCurrency") or txn.get("originalCurrency") or "ILS"
+    category = _guess_category(description, txn.get("category"))
+
+    return {
+        "id": str(uuid.uuid5(uuid.NAMESPACE_URL, external_id)),
+        "date": tx_date,
+        "amount": abs_amount,
+        "category": category,
+        "merchant": description[:100],
+        "type": tx_type,
+        "user_id": user_id,
+        "source": f"Israel Bank – {bank_id}",
+        "currency": currency,
+        "external_id": str(uuid.uuid5(uuid.NAMESPACE_URL, external_id)),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1588,7 +1838,7 @@ async def sync_all_banks(
 
     results: Dict[str, Any] = {"israel": [], "woob": [], "errors": []}
 
-    # ── Israeli bank connections ──────────────────────────────────────────
+    # ── Israeli bank connections (via Node.js scraper microservice) ───────
     try:
         israel_connections = await db_get_all_active_bank_connections()
     except Exception as exc:
@@ -1599,35 +1849,33 @@ async def sync_all_banks(
         if conn.get("connector_type") == "woob":
             continue  # handled below
         bank_id = conn.get("bank_id", "")
-        ConnectorCls = _BANK_CONNECTORS.get(bank_id)
-        if ConnectorCls is None:
-            continue
         user_id = conn.get("user_id", "")
+        if bank_id not in SUPPORTED_BANKS:
+            continue
         try:
             creds = decrypt_credentials(conn["encrypted_credentials"])
-            connector = ConnectorCls()
-            session = await asyncio.to_thread(connector.login, creds)
-            accounts = await asyncio.to_thread(connector.fetch_accounts, session)
 
             last_synced_at = conn.get("last_synced_at")
             from_date = (
-                datetime.fromisoformat(last_synced_at).date()
+                datetime.fromisoformat(last_synced_at).date().isoformat()
                 if last_synced_at
-                else (datetime.now(timezone.utc) - timedelta(days=30)).date()
+                else (datetime.now(timezone.utc) - timedelta(days=30)).date().isoformat()
             )
-            to_date = datetime.now(timezone.utc).date()
 
+            scraper_result = await _call_scraper("transactions", {
+                "company_id": bank_id,
+                "credentials": creds,
+                "start_date": from_date,
+            })
+
+            raw_accounts = scraper_result.get("accounts", [])
             all_txs: List[Dict[str, Any]] = []
-            for account in accounts:
-                raw_txs = await asyncio.to_thread(
-                    connector.fetch_transactions, session, account.account_id, from_date, to_date
-                )
-                for raw in raw_txs:
-                    all_txs.append(
-                        normalize_transaction(raw, user_id=user_id, source_label=f"Israel Bank – {bank_id}")
-                    )
-
-            await asyncio.to_thread(connector.logout, session)
+            for account in raw_accounts:
+                acct_num = account.get("accountNumber", "unknown")
+                for txn in account.get("txns", []):
+                    normalized = _normalize_scraper_transaction(txn, acct_num, bank_id, user_id)
+                    if normalized:
+                        all_txs.append(normalized)
 
             if all_txs:
                 await db_upsert_transactions_by_external_id(all_txs)
@@ -1635,6 +1883,7 @@ async def sync_all_banks(
             now_iso = datetime.now(timezone.utc).isoformat()
             conn["last_synced_at"] = now_iso
             conn["updated_at"] = now_iso
+            conn["accounts"] = [_normalize_scraper_account(acc, bank_id) for acc in raw_accounts]
             await db_upsert_bank_connection(conn)
 
             results["israel"].append({
@@ -1720,6 +1969,7 @@ async def startup_bank_scheduler():
     _scheduler = BankSyncScheduler(
         get_connections=db_get_all_active_bank_connections,
         upsert_transactions=db_upsert_transactions_by_external_id,
+        call_scraper=_call_scraper,
         sync_interval_hours=int(os.environ.get("ISRAEL_BANKS_SYNC_HOURS", "6")),
     )
     _scheduler.start()

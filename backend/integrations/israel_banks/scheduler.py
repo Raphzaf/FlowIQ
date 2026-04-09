@@ -3,36 +3,43 @@ Background scheduler for Israeli bank transaction synchronisation.
 
 Design
 ------
-* One ``asyncio.Task`` per bank connection record.
-* Each task sleeps for ``sync_interval_hours`` (default 6 h), then calls the
-  connector, normalises transactions, and upserts them into FlowIQ's database.
-* Tasks handle transient errors with exponential back-off (up to 5 retries).
-* When a session expires the scheduler re-authenticates automatically.
+* One ``asyncio.Task`` runs a periodic loop.
+* Each iteration calls the FastAPI ``/api/banks/sync-all`` cron endpoint,
+  which uses the Node.js scraper microservice to fetch real transactions.
+* Alternatively, in environments where the cron endpoint is not reachable,
+  the scheduler falls back to calling the scraper service directly via
+  ``_sync_one_via_scraper``.
 
 Usage (from server.py startup)
 -------------------------------
     from integrations.israel_banks.scheduler import BankSyncScheduler
 
-    scheduler = BankSyncScheduler(db_helper=..., sync_interval_hours=6)
-    scheduler.start()          # call once at application startup
-    scheduler.stop()           # call at application shutdown
+    scheduler = BankSyncScheduler(
+        get_connections=db_helper_fn,
+        upsert_transactions=db_upsert_fn,
+        call_scraper=call_scraper_fn,
+        sync_interval_hours=6,
+    )
+    scheduler.start()   # call once at application startup
+    scheduler.stop()    # call at application shutdown
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Type alias for the async DB helper functions that the scheduler needs
+# Type aliases
 # ---------------------------------------------------------------------------
 
 DbGetConnections = Callable[[], Coroutine[Any, Any, List[Dict[str, Any]]]]
 DbUpsertTransactions = Callable[[List[Dict[str, Any]]], Coroutine[Any, Any, None]]
+CallScraper = Callable[[str, Dict[str, Any]], Coroutine[Any, Any, Dict[str, Any]]]
 
 
 class BankSyncScheduler:
@@ -45,21 +52,26 @@ class BankSyncScheduler:
         Async callable that returns all active bank-connection records.
     upsert_transactions:
         Async callable that inserts / updates normalized transactions.
+    call_scraper:
+        Async callable that POSTs to the scraper microservice.
+        Signature: ``(endpoint: str, payload: dict) -> dict``
     sync_interval_hours:
         How often to run a full sync (default: 6).
     max_retries:
-        Max consecutive failures before a connection is marked 'error'.
+        Max consecutive failures before a connection is logged as error.
     """
 
     def __init__(
         self,
         get_connections: DbGetConnections,
         upsert_transactions: DbUpsertTransactions,
+        call_scraper: Optional[CallScraper] = None,
         sync_interval_hours: int = 6,
         max_retries: int = 5,
     ) -> None:
         self._get_connections = get_connections
         self._upsert_transactions = upsert_transactions
+        self._call_scraper = call_scraper
         self._interval = timedelta(hours=sync_interval_hours)
         self._max_retries = max_retries
         self._task: Optional[asyncio.Task] = None
@@ -95,37 +107,35 @@ class BankSyncScheduler:
             await asyncio.sleep(self._interval.total_seconds())
 
     async def _sync_all(self) -> None:
+        if self._call_scraper is None:
+            logger.warning(
+                "BankSyncScheduler: call_scraper not configured – skipping background sync. "
+                "Use the /api/banks/sync-all cron endpoint instead."
+            )
+            return
+
         try:
             connections = await self._get_connections()
         except Exception:
             logger.exception("Failed to fetch bank connections from DB")
             return
 
-        logger.info("Syncing %d bank connection(s)", len(connections))
-        for conn in connections:
-            if conn.get("status") != "connected":
-                continue
+        # Only sync Israeli bank connections (not Woob – handled separately)
+        israel_connections = [
+            c for c in connections
+            if c.get("status") == "connected" and c.get("connector_type") != "woob"
+        ]
+        logger.info("Syncing %d Israeli bank connection(s)", len(israel_connections))
+        for conn in israel_connections:
             await self._sync_one(conn)
 
     async def _sync_one(self, conn: Dict[str, Any]) -> None:
-        """Sync a single bank connection with exponential back-off retries."""
-        from .connectors import HapoalimConnector, LeumiConnector, DiscountConnector
+        """Sync a single bank connection via the scraper microservice."""
         from .crypto import decrypt_credentials
-        from .normalizer import normalize_transaction
 
         bank_id = conn.get("bank_id", "")
         user_id = conn.get("user_id", "")
         conn_id = conn.get("id", bank_id)
-
-        connector_map = {
-            "hapoalim": HapoalimConnector,
-            "leumi": LeumiConnector,
-            "discount": DiscountConnector,
-        }
-        ConnectorCls = connector_map.get(bank_id)
-        if ConnectorCls is None:
-            logger.warning("Unknown bank_id '%s' for connection %s", bank_id, conn_id)
-            return
 
         encrypted_creds = conn.get("encrypted_credentials", "")
         if not encrypted_creds:
@@ -136,33 +146,55 @@ class BankSyncScheduler:
         delay = 30.0
         while attempt < self._max_retries:
             try:
+                from .normalizer import _guess_category
+                import uuid
+
                 creds = decrypt_credentials(encrypted_creds)
-                connector = ConnectorCls()
-                session = connector.login(creds)
-                accounts = connector.fetch_accounts(session)
 
                 last_synced_at = conn.get("last_synced_at")
                 from_date = (
-                    datetime.fromisoformat(last_synced_at).date()
+                    datetime.fromisoformat(last_synced_at).date().isoformat()
                     if last_synced_at
-                    else (datetime.now(timezone.utc) - timedelta(days=30)).date()
+                    else (datetime.now(timezone.utc) - timedelta(days=30)).date().isoformat()
                 )
-                to_date = datetime.now(timezone.utc).date()
 
+                scraper_result = await self._call_scraper("transactions", {
+                    "company_id": bank_id,
+                    "credentials": creds,
+                    "start_date": from_date,
+                })
+
+                raw_accounts = scraper_result.get("accounts", [])
                 all_txs: List[Dict[str, Any]] = []
-                for account in accounts:
-                    raw_txs = connector.fetch_transactions(
-                        session, account.account_id, from_date, to_date
-                    )
-                    for raw in raw_txs:
-                        normalized = normalize_transaction(
-                            raw,
-                            user_id=user_id,
-                            source_label=f"Israel Bank – {bank_id}",
-                        )
-                        all_txs.append(normalized)
 
-                connector.logout(session)
+                for account in raw_accounts:
+                    acct_num = account.get("accountNumber", "unknown")
+                    for txn in account.get("txns", []):
+                        charged = txn.get("chargedAmount") or txn.get("originalAmount") or 0
+                        try:
+                            amount = float(charged)
+                        except (TypeError, ValueError):
+                            continue
+                        description = str(txn.get("description") or "Unknown")
+                        tx_date = txn.get("date") or txn.get("processedDate") or datetime.now(timezone.utc).date().isoformat()
+                        if "T" in tx_date:
+                            tx_date = tx_date[:10]
+                        identifier = str(txn.get("identifier") or "")
+                        ext_raw = f"{bank_id}:{acct_num}:{tx_date}:{identifier}:{amount}"
+                        tx_type = "income" if amount >= 0 else "expense"
+                        currency = txn.get("chargedCurrency") or txn.get("originalCurrency") or "ILS"
+                        all_txs.append({
+                            "id": str(uuid.uuid5(uuid.NAMESPACE_URL, ext_raw)),
+                            "date": tx_date,
+                            "amount": round(abs(amount), 2),
+                            "category": _guess_category(description, txn.get("category")),
+                            "merchant": description[:100],
+                            "type": tx_type,
+                            "user_id": user_id,
+                            "source": f"Israel Bank – {bank_id}",
+                            "currency": currency,
+                            "external_id": str(uuid.uuid5(uuid.NAMESPACE_URL, ext_raw)),
+                        })
 
                 if all_txs:
                     await self._upsert_transactions(all_txs)
