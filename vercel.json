@@ -25,5 +25,11 @@
       "src": "/(.*)",
       "dest": "/index.html"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/banks/sync-all",
+      "schedule": "0 */6 * * *"
+    }
   ]
 }
