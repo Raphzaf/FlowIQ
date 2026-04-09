@@ -33,6 +33,7 @@ const BankCard = ({ bank, connected, connectedSince, onConnect, onDisconnect, on
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [logoError, setLogoError] = useState(false);
 
   const handleConnect = async () => {
     if (!login || !password) {
@@ -56,12 +57,12 @@ const BankCard = ({ bank, connected, connectedSince, onConnect, onDisconnect, on
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-xl">
-              {bank.logo ? (
+              {bank.logo && !logoError ? (
                 <img
                   src={bank.logo}
                   alt={bank.name}
                   className="w-7 h-7 object-contain"
-                  onError={(e) => { e.currentTarget.style.display = "none"; }}
+                  onError={() => setLogoError(true)}
                 />
               ) : (
                 <Landmark className="w-5 h-5 text-indigo-600" />

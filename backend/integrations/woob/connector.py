@@ -163,6 +163,10 @@ class WoobBankConnector(BankConnector):
     def _validate_credentials(self) -> None:
         """Call iter_accounts() once to surface auth errors early."""
         if self._backend is None:
+            logger.warning(
+                "_validate_credentials called without an active backend for '%s'",
+                self.bank_id,
+            )
             return
         try:
             next(self._backend.iter_accounts(), None)

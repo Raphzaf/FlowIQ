@@ -1621,7 +1621,7 @@ async def sync_all_banks(
                 )
                 to_date = datetime.now(timezone.utc).date()
 
-                all_txs = []
+                all_txs: List[Dict[str, Any]] = []
                 for account in accounts:
                     raw_txs = await asyncio.to_thread(
                         connector.fetch_transactions, session, account.account_id, from_date, to_date
