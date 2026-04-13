@@ -205,6 +205,31 @@ async def db_get_transactions(user_id: str, limit: int = 1000) -> List[Dict[str,
     return await db.transactions.find(mongo_query, {"_id": 0}).to_list(limit)
 
 
+async def db_get_transactions_for_month(user_id: str, month: str) -> List[Dict[str, Any]]:
+    """Fetch all expense transactions for a specific month (YYYY-MM), without a hard limit."""
+    if use_supabase:
+        query = (
+            supabase.table("transactions")
+            .select("id,date,amount,category,type,user_id")
+            .like("date", f"{month}%")
+            .eq("type", "expense")
+        )
+        if _is_default_user(user_id):
+            query = query.or_(f"user_id.eq.{user_id},user_id.is.null")
+        else:
+            query = query.eq("user_id", user_id)
+        response = query.execute()
+        return response.data or []
+
+    mongo_query: Dict[str, Any] = {"type": "expense", "date": {"$regex": f"^{month}"}}
+    if _is_default_user(user_id):
+        mongo_query["$or"] = [{"user_id": user_id}, {"user_id": {"$exists": False}}]
+    else:
+        mongo_query["user_id"] = user_id
+
+    return await db.transactions.find(mongo_query, {"_id": 0}).to_list(None)
+
+
 async def db_insert_transaction(transaction: Dict[str, Any]) -> None:
     if use_supabase:
         supabase.table("transactions").insert(transaction).execute()
@@ -2052,16 +2077,11 @@ async def budgets_summary(
         month = datetime.now(timezone.utc).strftime("%Y-%m")
 
     budgets = await db_list_budgets(user_id, month=month)
-    transactions = await db_get_transactions(user_id=user_id, limit=5000)
+    transactions = await db_get_transactions_for_month(user_id, month)
 
     # Sum expenses by category for the given month
     spending: Dict[str, float] = {}
     for t in transactions:
-        if t.get("type") != "expense":
-            continue
-        date_str = t.get("date", "")
-        if not date_str.startswith(month):
-            continue
         cat = t.get("category", "")
         spending[cat] = spending.get(cat, 0.0) + float(t.get("amount", 0))
 
