@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Header
+from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Header, Body
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -476,6 +476,7 @@ class Transaction(BaseModel):
     merchant: str
     type: str = "expense"
     user_id: Optional[str] = None
+    user_category_override: Optional[str] = None
 
 class TransactionCreate(BaseModel):
     date: str
@@ -916,6 +917,46 @@ async def update_transaction(
         raise HTTPException(status_code=404, detail="Transaction not found")
 
     return Transaction(**updated)
+
+
+# ── CATEGORY OVERRIDE ─────────────────────────────────────────────────────
+
+VALID_CATEGORIES = [
+    "Supermarket", "Restaurants", "Transport", "Utilities", "Shopping",
+    "Entertainment", "Health", "Housing", "Education", "Travel", "Income", "Other",
+]
+
+@api_router.patch("/transactions/{transaction_id}/category", response_model=Transaction)
+async def patch_transaction_category(
+    transaction_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+    body: Dict[str, Any] = Body(...),
+):
+    """
+    Manually override the category of a transaction.
+    Body: {"category": str}
+    Saves to user_category_override field and updates category field.
+    Returns the full updated transaction document.
+    """
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    category = (body.get("category") or "").strip()
+    if not category or category not in VALID_CATEGORIES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid category. Must be one of: {VALID_CATEGORIES}",
+        )
+
+    updated = await db_update_transaction(
+        transaction_id,
+        user_id,
+        {"category": category, "user_category_override": category},
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    return Transaction(**updated)
+
 
 @api_router.post("/seed-demo-data")
 async def seed_demo_data(
