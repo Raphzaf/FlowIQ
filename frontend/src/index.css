@@ -5,6 +5,37 @@
 @tailwind utilities;
 
 @layer base {
+  .dark {
+    --background: 20 6% 3%;
+    --foreground: 60 5% 96%;
+    --card: 20 9% 9%;
+    --card-foreground: 60 5% 96%;
+    --popover: 20 9% 9%;
+    --popover-foreground: 60 5% 96%;
+    --primary: 60 5% 96%;
+    --primary-foreground: 20 9% 9%;
+    --secondary: 22 8% 15%;
+    --secondary-foreground: 60 5% 96%;
+    --muted: 22 8% 15%;
+    --muted-foreground: 30 6% 63%;
+    --accent: 22 8% 15%;
+    --accent-foreground: 60 5% 96%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 60 5% 96%;
+    --border: 22 8% 15%;
+    --input: 22 8% 15%;
+    --ring: 30 6% 63%;
+
+    /* Chart colors - slightly brighter for dark backgrounds */
+    --chart-1: 220 80% 65%;
+    --chart-2: 152 69% 50%;
+    --chart-3: 30 90% 65%;
+    --chart-4: 280 75% 70%;
+    --chart-5: 340 80% 65%;
+  }
+}
+
+@layer base {
     :root {
         --background: 40 20% 98%;
         --foreground: 24 10% 10%;
@@ -526,3 +557,45 @@
 .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
 .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
 .touch-target { min-height: 44px; min-width: 44px; }
+
+/* Dark mode skeleton */
+.dark .skeleton {
+  background: linear-gradient(
+    90deg,
+    hsl(22 8% 15%) 25%,
+    hsl(22 8% 20%) 50%,
+    hsl(22 8% 15%) 75%
+  );
+  background-size: 200% 100%;
+}
+
+/* Dark mode card-premium class */
+.dark .card-premium {
+  background-color: #1C1917;
+  border-color: #292524;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+}
+
+/* Dark mode scrollbar */
+.dark ::-webkit-scrollbar-track { background: #0C0A09; }
+.dark ::-webkit-scrollbar-thumb { background: #292524; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #3C3735; }
+
+/* Dark mode recharts tooltip */
+.dark .recharts-default-tooltip {
+  background: rgba(28, 25, 23, 0.98) !important;
+  border: 1px solid rgba(41, 37, 36, 0.8) !important;
+}
+
+.dark .recharts-tooltip-label {
+  color: #F5F5F4 !important;
+}
+
+.dark .recharts-tooltip-item {
+  color: #A8A29E !important;
+}
+
+.dark .recharts-cartesian-grid-horizontal line,
+.dark .recharts-cartesian-grid-vertical line {
+  stroke: #292524;
+}

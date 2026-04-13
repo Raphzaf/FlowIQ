@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useApi } from "../App";
 import useWindowWidth from "../hooks/useWindowWidth";
+import { useTheme } from "../context/ThemeContext";
 import { Card, CardContent } from "../components/ui/card";
 import { 
   Wallet, 
@@ -320,7 +321,7 @@ const CashflowCard = ({ cashflow, loading }) => {
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
             <Calendar className="w-4 h-4 text-stone-400" />
-            <p className="text-sm font-medium text-stone-500">Month-End Forecast</p>
+            <p className="text-sm font-medium text-stone-500 dark:text-stone-400">Month-End Forecast</p>
           </div>
           {isWarning ? (
             <span className="badge badge-error">Alert</span>
@@ -337,20 +338,20 @@ const CashflowCard = ({ cashflow, loading }) => {
               prefix={projectedBalance >= 0 ? "$" : "-$"}
             />
           </p>
-          <p className="text-sm text-stone-500 mt-1">projected balance</p>
+          <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">projected balance</p>
         </div>
         
         {/* Stats */}
-        <div className="space-y-3 pt-4 border-t border-stone-100">
+        <div className="space-y-3 pt-4 border-t border-stone-100 dark:border-stone-700">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-stone-500">Daily average</span>
-            <span className="text-sm font-semibold text-stone-900 tabular-nums">
+            <span className="text-sm text-stone-500 dark:text-stone-400">Daily average</span>
+            <span className="text-sm font-semibold text-stone-900 dark:text-stone-100 tabular-nums">
               ${(cashflow?.daily_average_spending || 0).toLocaleString()}
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-stone-500">Days remaining</span>
-            <span className="text-sm font-semibold text-stone-900">
+            <span className="text-sm text-stone-500 dark:text-stone-400">Days remaining</span>
+            <span className="text-sm font-semibold text-stone-900 dark:text-stone-100">
               {cashflow?.days_remaining || 0} days
             </span>
           </div>
@@ -363,6 +364,7 @@ const CashflowCard = ({ cashflow, loading }) => {
 // Monthly Spending Chart - Premium Design
 const SpendingChart = ({ data, loading }) => {
   const windowWidth = useWindowWidth();
+  const { theme } = useTheme();
   if (loading) {
     return (
       <Card className="col-span-full md:col-span-8 card-premium rounded-3xl" data-testid="spending-chart-loading">
@@ -380,10 +382,10 @@ const SpendingChart = ({ data, loading }) => {
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-white/95 backdrop-blur-lg border border-stone-100 rounded-2xl px-4 py-3 shadow-premium">
-          <p className="font-heading font-semibold text-stone-900 mb-1">{label}</p>
-          <p className="text-sm text-stone-600">
-            Spent: <span className="font-semibold text-stone-900">{formatCurrency(payload[0].value)}</span>
+        <div className="bg-white/95 dark:bg-stone-800/95 backdrop-blur-lg border border-stone-100 dark:border-stone-700 rounded-2xl px-4 py-3 shadow-premium">
+          <p className="font-heading font-semibold text-stone-900 dark:text-stone-100 mb-1">{label}</p>
+          <p className="text-sm text-stone-600 dark:text-stone-400">
+            Spent: <span className="font-semibold text-stone-900 dark:text-stone-100">{formatCurrency(payload[0].value)}</span>
           </p>
         </div>
       );
@@ -395,10 +397,10 @@ const SpendingChart = ({ data, loading }) => {
     <Card className="col-span-full md:col-span-8 card-premium rounded-3xl animate-fade-in-up delay-150" data-testid="spending-chart">
       <CardContent className="p-4 sm:p-6 lg:p-8">
         <div className="flex items-center justify-between mb-8">
-          <h3 className="font-heading text-lg font-semibold text-stone-900">
+          <h3 className="font-heading text-lg font-semibold text-stone-900 dark:text-stone-100">
             Monthly Spending
           </h3>
-          <span className="text-sm text-stone-500">Last 6 months</span>
+          <span className="text-sm text-stone-500 dark:text-stone-400">Last 6 months</span>
         </div>
         
         <div className="h-56 md:h-72">
@@ -414,13 +416,13 @@ const SpendingChart = ({ data, loading }) => {
                 dataKey="month" 
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: '#A8A29E', fontSize: windowWidth < MOBILE_BREAKPOINT ? 10 : 12, fontWeight: 500 }}
+                tick={{ fill: theme === 'dark' ? '#57534E' : '#A8A29E', fontSize: windowWidth < MOBILE_BREAKPOINT ? 10 : 12, fontWeight: 500 }}
                 dy={8}
               />
               <YAxis 
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: '#A8A29E', fontSize: windowWidth < MOBILE_BREAKPOINT ? 10 : 12 }}
+                tick={{ fill: theme === 'dark' ? '#57534E' : '#A8A29E', fontSize: windowWidth < MOBILE_BREAKPOINT ? 10 : 12 }}
                 tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
                 dx={-8}
               />
@@ -441,6 +443,7 @@ const SpendingChart = ({ data, loading }) => {
 
 // Category Breakdown - Donut Chart
 const CategoryChart = ({ data, loading }) => {
+  const { theme } = useTheme();
   if (loading) {
     return (
       <Card className="col-span-full md:col-span-4 card-premium rounded-3xl" data-testid="category-chart-loading">
@@ -470,7 +473,7 @@ const CategoryChart = ({ data, loading }) => {
   return (
     <Card className="col-span-full md:col-span-4 card-premium rounded-3xl animate-fade-in-up delay-200" data-testid="category-chart">
       <CardContent className="p-4 sm:p-6 lg:p-8">
-        <h3 className="font-heading text-lg font-semibold text-stone-900 mb-6">
+        <h3 className="font-heading text-lg font-semibold text-stone-900 dark:text-stone-100 mb-6">
           Spending by Category
         </h3>
         
@@ -498,10 +501,11 @@ const CategoryChart = ({ data, loading }) => {
               <Tooltip 
                 formatter={(value) => formatCurrency(value)}
                 contentStyle={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                  border: '1px solid rgba(0,0,0,0.05)',
+                  backgroundColor: theme === 'dark' ? 'rgba(28, 25, 23, 0.98)' : 'rgba(255, 255, 255, 0.95)',
+                  border: theme === 'dark' ? '1px solid rgba(41, 37, 36, 0.8)' : '1px solid rgba(0,0,0,0.05)',
                   borderRadius: '12px',
                   boxShadow: '0 8px 24px rgba(0, 0, 0, 0.08)',
+                  color: theme === 'dark' ? '#F5F5F4' : '#1C1917',
                 }}
               />
             </PieChart>
@@ -519,15 +523,15 @@ const CategoryChart = ({ data, loading }) => {
                     className="w-3 h-3 rounded-full"
                     style={{ backgroundColor: CATEGORY_COLORS[item.name] || '#78716C' }}
                   />
-                  <span className="text-sm text-stone-600 group-hover:text-stone-900 transition-colors">
+                  <span className="text-sm text-stone-600 dark:text-stone-400 group-hover:text-stone-900 dark:group-hover:text-stone-100 transition-colors">
                     {item.name}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm font-medium text-stone-900 tabular-nums">
+                  <span className="text-sm font-medium text-stone-900 dark:text-stone-100 tabular-nums">
                     {formatCurrency(item.value)}
                   </span>
-                  <span className="text-xs text-stone-400 w-8 text-right">{pct}%</span>
+                  <span className="text-xs text-stone-400 dark:text-stone-500 w-8 text-right">{pct}%</span>
                 </div>
               </div>
             );
@@ -587,12 +591,12 @@ const QuickInsights = ({ insights, loading }) => {
     <Card className="col-span-full card-premium rounded-3xl animate-fade-in-up delay-250" data-testid="quick-insights">
       <CardContent className="p-4 sm:p-6 lg:p-8">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="font-heading text-lg font-semibold text-stone-900">
+          <h3 className="font-heading text-lg font-semibold text-stone-900 dark:text-stone-100">
             Quick Insights
           </h3>
           <Link 
             to="/insights" 
-            className="flex items-center gap-1.5 text-sm font-medium text-stone-500 hover:text-stone-900 transition-colors group"
+            className="flex items-center gap-1.5 text-sm font-medium text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 transition-colors group"
             data-testid="view-all-insights-link"
           >
             View all 
@@ -613,10 +617,10 @@ const QuickInsights = ({ insights, loading }) => {
                   {getInsightIcon(insight.type)}
                 </div>
                 <div className="min-w-0">
-                  <h4 className="font-semibold text-stone-900 text-sm mb-1 line-clamp-1">
+                  <h4 className="font-semibold text-stone-900 dark:text-stone-100 text-sm mb-1 line-clamp-1">
                     {insight.title}
                   </h4>
-                  <p className="text-sm text-stone-600 line-clamp-2 leading-relaxed">
+                  <p className="text-sm text-stone-600 dark:text-stone-400 line-clamp-2 leading-relaxed">
                     {insight.description}
                   </p>
                 </div>
@@ -635,19 +639,19 @@ const DashboardEmptyState = () => (
     className="col-span-full flex flex-col items-center justify-center py-20 text-center animate-fade-in-up"
     data-testid="dashboard-empty-state"
   >
-    <div className="w-20 h-20 rounded-3xl bg-stone-100 flex items-center justify-center mb-6">
-      <Wallet className="w-10 h-10 text-stone-300" />
+    <div className="w-20 h-20 rounded-3xl bg-stone-100 dark:bg-stone-800 flex items-center justify-center mb-6">
+      <Wallet className="w-10 h-10 text-stone-300 dark:text-stone-600" />
     </div>
-    <h2 className="font-heading text-2xl font-bold text-stone-900 mb-2">
+    <h2 className="font-heading text-2xl font-bold text-stone-900 dark:text-stone-100 mb-2">
       No transactions yet
     </h2>
-    <p className="text-stone-500 mb-8 max-w-sm">
+    <p className="text-stone-500 dark:text-stone-400 mb-8 max-w-sm">
       Import a CSV or connect a bank to start seeing your financial insights here.
     </p>
     <div className="flex flex-col sm:flex-row gap-3">
       <Link
         to="/upload"
-        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-stone-900 text-white font-medium hover:bg-stone-800 transition-colors text-sm"
+        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 font-medium hover:bg-stone-800 dark:hover:bg-stone-200 transition-colors text-sm"
         data-testid="empty-goto-upload"
       >
         <ArrowRight className="w-4 h-4" />
@@ -655,14 +659,14 @@ const DashboardEmptyState = () => (
       </Link>
       <Link
         to="/banks"
-        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-stone-200 text-stone-700 font-medium hover:bg-stone-50 transition-colors text-sm"
+        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-300 font-medium hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors text-sm"
         data-testid="empty-goto-banks"
       >
         Connect a bank
       </Link>
       <Link
         to="/onboarding"
-        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-stone-200 text-stone-700 font-medium hover:bg-stone-50 transition-colors text-sm"
+        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-300 font-medium hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors text-sm"
         data-testid="empty-goto-onboarding"
       >
         Resume setup
@@ -681,10 +685,10 @@ const Dashboard = () => {
     <div data-testid="dashboard-page">
       {/* Page Header */}
       <div className="mb-8 animate-fade-in">
-        <h1 className="font-heading text-3xl lg:text-4xl font-bold text-stone-900 mb-2">
+        <h1 className="font-heading text-3xl lg:text-4xl font-bold text-stone-900 dark:text-stone-100 mb-2">
           Dashboard
         </h1>
-        <p className="text-stone-500">
+        <p className="text-stone-500 dark:text-stone-400">
           Your financial overview at a glance
         </p>
       </div>

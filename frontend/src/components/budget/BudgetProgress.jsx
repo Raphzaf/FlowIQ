@@ -8,7 +8,7 @@ const BudgetProgress = ({ percentage, status }) => {
   const c = colors[status] || colors.ok;
   return (
     <div className="space-y-1.5">
-      <div className={`relative h-2.5 bg-stone-100 rounded-full overflow-hidden ${status === "exceeded" ? c.glow : ""}`}>
+      <div className={`relative h-2.5 bg-stone-100 dark:bg-stone-700 rounded-full overflow-hidden ${status === "exceeded" ? c.glow : ""}`}>
         <div
           className={`absolute left-0 top-0 h-full rounded-full transition-all duration-700 ${c.bar}`}
           style={{ width: `${clampedPct}%` }}

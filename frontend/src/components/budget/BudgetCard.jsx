@@ -41,7 +41,7 @@ const BudgetCard = ({ budget, onEdit, onDelete }) => {
               {config.emoji}
             </div>
             <div>
-              <p className="font-heading font-semibold text-stone-900 leading-tight">{budget.category}</p>
+              <p className="font-heading font-semibold text-stone-900 dark:text-stone-100 leading-tight">{budget.category}</p>
               <span className={`inline-flex items-center mt-0.5 px-2 py-0.5 rounded-full text-xs font-semibold ${badge.className}`}>
                 {badge.label}
               </span>
@@ -49,10 +49,10 @@ const BudgetCard = ({ budget, onEdit, onDelete }) => {
           </div>
           {/* Edit/Delete buttons */}
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button onClick={() => onEdit(budget)} className="p-2 rounded-xl hover:bg-stone-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center" data-testid={`budget-edit-${budget.id}`}>
-              <Edit3 className="w-4 h-4 text-stone-400 hover:text-stone-600" />
+            <button onClick={() => onEdit(budget)} className="p-2 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center" data-testid={`budget-edit-${budget.id}`}>
+              <Edit3 className="w-4 h-4 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300" />
             </button>
-            <button onClick={() => onDelete(budget)} className="p-2 rounded-xl hover:bg-rose-50 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center" data-testid={`budget-delete-${budget.id}`}>
+            <button onClick={() => onDelete(budget)} className="p-2 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center" data-testid={`budget-delete-${budget.id}`}>
               <Trash2 className="w-4 h-4 text-stone-400 hover:text-rose-500" />
             </button>
           </div>
@@ -61,8 +61,8 @@ const BudgetCard = ({ budget, onEdit, onDelete }) => {
         {/* Amount row */}
         <div className="flex items-baseline justify-between">
           <div>
-            <p className="text-2xl font-heading font-bold text-stone-900 tabular-nums">{formatILS(budget.spent_amount)}</p>
-            <p className="text-sm text-stone-400">of {formatILS(budget.budget_amount)}</p>
+            <p className="text-2xl font-heading font-bold text-stone-900 dark:text-stone-100 tabular-nums">{formatILS(budget.spent_amount)}</p>
+            <p className="text-sm text-stone-400 dark:text-stone-500">of {formatILS(budget.budget_amount)}</p>
           </div>
           <p className={`text-sm font-medium tabular-nums ${budget.remaining >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
             {budget.remaining >= 0 ? `${formatILS(budget.remaining)} left` : `${formatILS(Math.abs(budget.remaining))} over`}

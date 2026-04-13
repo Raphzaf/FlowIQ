@@ -16,8 +16,11 @@ import {
   LogOut,
   ShieldCheck,
   Building2,
-  PlayCircle
+  PlayCircle,
+  Sun,
+  Moon
 } from "lucide-react";
+import { ThemeProvider, useTheme } from "./context/ThemeContext";
 import { useDemoMode } from "./hooks/useDemoMode";
 import BottomNav from "./components/layout/BottomNav";
 import {
@@ -79,6 +82,7 @@ const Navigation = ({ onSignOut, isDemoMode, onExitDemo }) => {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const { theme, toggleTheme } = useTheme();
   
   // Detect scroll for nav styling
   useEffect(() => {
@@ -103,7 +107,7 @@ const Navigation = ({ onSignOut, isDemoMode, onExitDemo }) => {
     <header 
       className={`sticky top-0 z-50 w-full transition-all duration-300 ${
         scrolled 
-          ? 'bg-white/80 backdrop-blur-xl shadow-sm border-b border-stone-200/50' 
+          ? 'bg-white/80 dark:bg-stone-900/80 backdrop-blur-xl shadow-sm border-b border-stone-200/50 dark:border-stone-700/50' 
           : 'bg-transparent'
       }`}
     >
@@ -118,14 +122,14 @@ const Navigation = ({ onSignOut, isDemoMode, onExitDemo }) => {
             <div className="w-8 h-8 lg:w-9 lg:h-9 rounded-xl bg-stone-900 flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform duration-200">
               <TrendingUp className="w-4 h-4 lg:w-5 lg:h-5 text-white" />
             </div>
-            <span className="font-heading font-bold text-lg lg:text-xl text-stone-900">
+            <span className="font-heading font-bold text-lg lg:text-xl text-stone-900 dark:text-stone-100">
               FlowIQ
             </span>
           </NavLink>
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-2">
-            <nav className="flex items-center gap-1 bg-stone-100/80 backdrop-blur-sm rounded-full p-1" data-testid="desktop-nav">
+            <nav className="flex items-center gap-1 bg-stone-100/80 dark:bg-stone-800/80 backdrop-blur-sm rounded-full p-1" data-testid="desktop-nav">
             {navItems.map((item) => {
               const isActive = location.pathname === item.path;
               const Icon = item.icon;
@@ -136,8 +140,8 @@ const Navigation = ({ onSignOut, isDemoMode, onExitDemo }) => {
                   data-testid={`nav-${item.label.toLowerCase()}`}
                   className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
                     isActive
-                      ? "bg-white text-stone-900 shadow-sm"
-                      : "text-stone-600 hover:text-stone-900"
+                      ? "bg-white dark:bg-stone-700 text-stone-900 dark:text-stone-100 shadow-sm"
+                      : "text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100"
                   }`}
                 >
                   <Icon className="w-4 h-4" />
@@ -147,8 +151,19 @@ const Navigation = ({ onSignOut, isDemoMode, onExitDemo }) => {
             })}
             </nav>
             <button
+              onClick={toggleTheme}
+              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              className="w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-600 dark:text-stone-300"
+              data-testid="theme-toggle"
+            >
+              {theme === "dark"
+                ? <Sun className="w-[18px] h-[18px] transition-transform duration-300 rotate-0" />
+                : <Moon className="w-[18px] h-[18px] transition-transform duration-300 rotate-0" />
+              }
+            </button>
+            <button
               onClick={isDemoMode ? onExitDemo : onSignOut}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium text-stone-600 hover:text-stone-900 hover:bg-stone-100 transition-all"
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-100 dark:hover:bg-stone-800 transition-all"
               data-testid="signout-btn"
             >
               <LogOut className="w-4 h-4" />
@@ -158,14 +173,14 @@ const Navigation = ({ onSignOut, isDemoMode, onExitDemo }) => {
 
           {/* Mobile menu button */}
           <button
-            className="md:hidden w-10 h-10 rounded-xl flex items-center justify-center hover:bg-stone-100 transition-colors"
+            className="md:hidden w-10 h-10 rounded-xl flex items-center justify-center hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             data-testid="mobile-menu-btn"
           >
             {mobileMenuOpen ? (
-              <X className="w-5 h-5 text-stone-700" />
+              <X className="w-5 h-5 text-stone-700 dark:text-stone-300" />
             ) : (
-              <Menu className="w-5 h-5 text-stone-700" />
+              <Menu className="w-5 h-5 text-stone-700 dark:text-stone-300" />
             )}
           </button>
         </div>
@@ -173,7 +188,7 @@ const Navigation = ({ onSignOut, isDemoMode, onExitDemo }) => {
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
           <nav 
-            className="md:hidden py-4 border-t border-stone-200 animate-fade-in" 
+            className="md:hidden py-4 border-t border-stone-200 dark:border-stone-700 animate-fade-in" 
             data-testid="mobile-nav"
           >
             <div className="space-y-1">
@@ -188,8 +203,8 @@ const Navigation = ({ onSignOut, isDemoMode, onExitDemo }) => {
                     data-testid={`mobile-nav-${item.label.toLowerCase()}`}
                     className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
                       isActive
-                        ? "bg-stone-900 text-white"
-                        : "text-stone-600 hover:bg-stone-100"
+                        ? "bg-stone-900 dark:bg-stone-700 text-white"
+                        : "text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800"
                     }`}
                   >
                     <Icon className="w-5 h-5" />
@@ -197,6 +212,18 @@ const Navigation = ({ onSignOut, isDemoMode, onExitDemo }) => {
                   </NavLink>
                 );
               })}
+              <button
+                onClick={toggleTheme}
+                aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-all"
+                data-testid="mobile-theme-toggle"
+              >
+                {theme === "dark"
+                  ? <Sun className="w-5 h-5" />
+                  : <Moon className="w-5 h-5" />
+                }
+                {theme === "dark" ? "Light mode" : "Dark mode"}
+              </button>
               <button
                 onClick={() => {
                   setMobileMenuOpen(false);
@@ -206,7 +233,7 @@ const Navigation = ({ onSignOut, isDemoMode, onExitDemo }) => {
                     onSignOut();
                   }
                 }}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-stone-600 hover:bg-stone-100 transition-all"
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-all"
                 data-testid="mobile-signout-btn"
               >
                 <LogOut className="w-5 h-5" />
@@ -679,8 +706,9 @@ function App() {
   }
 
   return (
+    <ThemeProvider>
     <ApiContext.Provider value={apiValue}>
-      <div className="min-h-screen bg-[#FAF9F7]">
+      <div className="min-h-screen bg-[#FAF9F7] dark:bg-[#0C0A09]">
         <BrowserRouter>
           {/* Demo banner — shown when in demo mode */}
           {isDemoMode && (
@@ -768,6 +796,7 @@ function App() {
         />
       </div>
     </ApiContext.Provider>
+    </ThemeProvider>
   );
 }
 
