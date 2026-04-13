@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useApi } from "../App";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -10,6 +10,15 @@ import {
   DialogTitle,
   DialogFooter,
 } from "../components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "../components/ui/command";
 import { 
   Search, 
   Filter, 
@@ -34,6 +43,7 @@ import {
 import { toast } from "sonner";
 import axios from "axios";
 import { WeeklyBudgetWidget } from "./QuickEntry";
+import CategoryBadge, { CATEGORY_CONFIG } from "../components/transactions/CategoryBadge";
 
 // Category configuration
 const CATEGORIES = [
@@ -69,7 +79,7 @@ const Skeleton = ({ className }) => (
 );
 
 // Transaction Row Component
-const TransactionRow = ({ transaction, onEdit, onDelete }) => {
+const TransactionRow = ({ transaction, onEdit, onDelete, API, onCategoryChange }) => {
   const category = CATEGORIES.find((c) => c.name === transaction.category);
   const Icon = category?.icon || Receipt;
   const color = category?.color || "#78716C";
@@ -105,7 +115,13 @@ const TransactionRow = ({ transaction, onEdit, onDelete }) => {
           {transaction.merchant}
         </p>
         <div className="flex items-center gap-2 text-sm text-stone-500">
-          <span>{transaction.category}</span>
+          <CategoryBadge
+            transactionId={transaction.id || transaction._id}
+            category={transaction.category || "Other"}
+            userCategoryOverride={transaction.user_category_override}
+            API={API}
+            onCategoryChange={onCategoryChange}
+          />
           <span>•</span>
           <span>{formatDate(transaction.date)}</span>
         </div>
@@ -303,20 +319,115 @@ const FilterChip = ({ label, active, onClick, icon: Icon }) => (
   </button>
 );
 
+// All categories for the multi-select filter
+const ALL_FILTER_CATEGORIES = [
+  "Supermarket", "Restaurants", "Transport", "Utilities", "Shopping",
+  "Entertainment", "Health", "Housing", "Education", "Travel", "Income", "Other",
+];
+
+// Multi-select category filter popover
+const CategoryMultiFilter = ({ value, onChange }) => {
+  const [open, setOpen] = useState(false);
+
+  const label = value.length === 0
+    ? "All categories"
+    : value.length === 1
+    ? value[0]
+    : `${value.length} categories`;
+
+  const toggle = (cat) => {
+    onChange(value.includes(cat) ? value.filter(c => c !== cat) : [...value, cat]);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border text-sm font-medium transition-all min-h-[44px] ${
+            value.length > 0
+              ? "border-stone-900 bg-stone-900 text-white"
+              : "border-stone-200 bg-white text-stone-600 hover:border-stone-300"
+          }`}
+          data-testid="category-multifilter-trigger"
+        >
+          <span>🏷️</span>
+          <span className="max-w-[120px] truncate">{label}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-0 rounded-2xl shadow-lg border border-stone-200" align="start" sideOffset={4}>
+        <Command>
+          <CommandInput placeholder="Search…" className="h-9 text-sm" />
+          <CommandList>
+            <CommandEmpty className="py-3 text-center text-sm text-stone-400">No results</CommandEmpty>
+            <CommandGroup>
+              {ALL_FILTER_CATEGORIES.map(cat => {
+                const isSelected = value.includes(cat);
+                const cfg = CATEGORY_CONFIG[cat] || { emoji: "📌" };
+                return (
+                  <CommandItem
+                    key={cat}
+                    value={cat}
+                    onSelect={() => toggle(cat)}
+                    className="flex items-center gap-2 px-3 py-2 cursor-pointer rounded-xl mx-1 my-0.5 text-sm"
+                    data-testid={`filter-category-${cat}`}
+                  >
+                    <span>{cfg.emoji}</span>
+                    <span className="flex-1">{cat}</span>
+                    {isSelected && <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" />}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+            {value.length > 0 && (
+              <div className="p-1 border-t border-stone-100">
+                <button
+                  onClick={() => { onChange([]); setOpen(false); }}
+                  className="w-full text-xs text-stone-500 hover:text-stone-800 py-1.5 px-3 rounded-lg hover:bg-stone-50 transition-colors"
+                  data-testid="category-filter-clear"
+                >
+                  Clear filter
+                </button>
+              </div>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
 // Main Transactions Page
 const Transactions = () => {
   const { API, transactions, loading, refreshData } = useApi();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [categoryFilter, setCategoryFilter] = useState([]);
   const [dateFilter, setDateFilter] = useState("all"); // all, week, month
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [deletingTransaction, setDeletingTransaction] = useState(null);
 
+  // Local copy for optimistic category updates
+  const [localTransactions, setLocalTransactions] = useState(transactions);
+
+  // Keep localTransactions in sync when the source data changes
+  useEffect(() => {
+    setLocalTransactions(transactions);
+  }, [transactions]);
+
+  const handleCategoryChange = useCallback((txnId, newCategory) => {
+    setLocalTransactions(prev =>
+      (prev || []).map(t =>
+        (t.id || t._id) === txnId
+          ? { ...t, category: newCategory, user_category_override: newCategory }
+          : t
+      )
+    );
+  }, []);
+
   // Filter transactions
   const filteredTransactions = useMemo(() => {
-    if (!transactions) return [];
+    if (!localTransactions) return [];
     
-    let filtered = [...transactions];
+    let filtered = [...localTransactions];
     
     // Search filter
     if (searchQuery) {
@@ -328,9 +439,9 @@ const Transactions = () => {
       );
     }
     
-    // Category filter
-    if (selectedCategory) {
-      filtered = filtered.filter((t) => t.category === selectedCategory);
+    // Category filter (multi-select)
+    if (categoryFilter.length > 0) {
+      filtered = filtered.filter((t) => categoryFilter.includes(t.category));
     }
     
     // Date filter
@@ -349,7 +460,7 @@ const Transactions = () => {
     filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
     
     return filtered;
-  }, [transactions, searchQuery, selectedCategory, dateFilter]);
+  }, [localTransactions, searchQuery, categoryFilter, dateFilter]);
 
   // Group transactions by date
   const groupedTransactions = useMemo(() => {
@@ -470,16 +581,8 @@ const Transactions = () => {
                 active={dateFilter === "month"}
                 onClick={() => setDateFilter("month")}
               />
-              <div className="w-px h-6 bg-stone-200 mx-1" />
-              {CATEGORIES.slice(0, 4).map((cat) => (
-                <FilterChip
-                  key={cat.name}
-                  label={cat.name}
-                  active={selectedCategory === cat.name}
-                  onClick={() => setSelectedCategory(selectedCategory === cat.name ? null : cat.name)}
-                  icon={cat.icon}
-                />
-              ))}
+              <div className="w-px h-6 bg-stone-200 mx-1 self-center" />
+              <CategoryMultiFilter value={categoryFilter} onChange={setCategoryFilter} />
             </div>
           </div>
 
@@ -492,7 +595,7 @@ const Transactions = () => {
                   No transactions found
                 </h3>
                 <p className="text-stone-500 text-sm">
-                  {searchQuery || selectedCategory
+                  {searchQuery || categoryFilter.length > 0
                     ? "Try adjusting your filters"
                     : "Add your first expense using the + button"}
                 </p>
@@ -516,9 +619,16 @@ const Transactions = () => {
                           <p className="font-medium text-stone-900 truncate text-sm">
                             {transaction.merchant}
                           </p>
-                          <p className="text-xs text-stone-500 truncate">
-                            {transaction.category} · {transaction.date}
-                          </p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <CategoryBadge
+                              transactionId={transaction.id || transaction._id}
+                              category={transaction.category || "Other"}
+                              userCategoryOverride={transaction.user_category_override}
+                              API={API}
+                              onCategoryChange={(newCat) => handleCategoryChange(transaction.id || transaction._id, newCat)}
+                            />
+                            <span className="text-xs text-stone-400">· {transaction.date}</span>
+                          </div>
                         </div>
                         <p className={`font-semibold text-sm tabular-nums flex-shrink-0 ${
                           isIncome ? "text-emerald-600" : "text-rose-600"
@@ -544,6 +654,8 @@ const Transactions = () => {
                             transaction={transaction}
                             onEdit={setEditingTransaction}
                             onDelete={setDeletingTransaction}
+                            API={API}
+                            onCategoryChange={(newCat) => handleCategoryChange(transaction.id || transaction._id, newCat)}
                           />
                         ))}
                       </div>
