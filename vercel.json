@@ -1,26 +1,16 @@
 {
   "version": 2,
   "functions": {
-    "backend/api/index.py": {
-      "runtime": "python3.12"
-    },
-    "scraper-service/api/scraper/israel/supported.js": {
-      "runtime": "nodejs20.x"
-    },
     "scraper-service/api/scraper/israel/login.js": {
-      "runtime": "nodejs20.x",
       "maxDuration": 60
     },
     "scraper-service/api/scraper/israel/otp.js": {
-      "runtime": "nodejs20.x",
       "maxDuration": 60
     },
     "scraper-service/api/scraper/israel/accounts.js": {
-      "runtime": "nodejs20.x",
       "maxDuration": 60
     },
     "scraper-service/api/scraper/israel/transactions.js": {
-      "runtime": "nodejs20.x",
       "maxDuration": 60
     }
   },
