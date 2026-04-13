@@ -22,3 +22,5 @@ jq>=1.6.0
 typer>=0.9.0
 woob>=3.6
 httpx>=0.27.0
+upstash-redis>=1.0.0
+upstash-ratelimit>=1.0.0

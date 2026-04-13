@@ -1,5 +1,9 @@
 """
-In-memory fixed-window rate limiting middleware (no external dependencies).
+Fixed-window rate limiting middleware.
+
+Uses Upstash Redis when UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN
+are set; falls back to an in-memory dict silently when either variable is absent
+or when the Upstash packages are not installed.
 
 Key: client IP + rule name.
 Response on limit exceeded: 429 Too Many Requests + Retry-After header.
@@ -9,6 +13,7 @@ Rules applied:
   /api/upload-csv       → 10 req / 300 s / IP
   /api/banks/sync-all   →  2 req / 60 s / IP
 """
+import os
 import time
 from collections import defaultdict
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -16,7 +21,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 
-# (max_requests, window_seconds)
+# (rule_name, max_requests, window_seconds)
 _RULES: list[tuple[str, int, int]] = [
     ("/api/banks/sync-all", 2, 60),
     ("/api/upload-csv", 10, 300),
@@ -26,6 +31,48 @@ _RULES: list[tuple[str, int, int]] = [
 # {(ip, rule_path): [window_start, count]}
 _counters: dict[tuple[str, str], list] = defaultdict(lambda: [0.0, 0])
 
+# ---------------------------------------------------------------------------
+# Upstash Redis setup (optional — graceful fallback when env vars are absent)
+# ---------------------------------------------------------------------------
+_upstash_limiters: dict[str, object] = {}
+
+def _init_upstash() -> bool:
+    """Try to initialise one Ratelimit instance per rule. Returns True on success."""
+    url = os.environ.get("UPSTASH_REDIS_REST_URL", "")
+    token = os.environ.get("UPSTASH_REDIS_REST_TOKEN", "")
+    if not url or not token:
+        return False
+    try:
+        from upstash_redis import Redis
+        from upstash_ratelimit import Ratelimit, FixedWindow
+
+        redis = Redis(url=url, token=token)
+        _upstash_limiters["/api/banks/sync-all"] = Ratelimit(
+            redis=redis,
+            limiter=FixedWindow(max_requests=2, window=60),
+            prefix="rl:sync-all",
+        )
+        _upstash_limiters["/api/upload-csv"] = Ratelimit(
+            redis=redis,
+            limiter=FixedWindow(max_requests=10, window=300),
+            prefix="rl:upload-csv",
+        )
+        _upstash_limiters["/api/banks/"] = Ratelimit(
+            redis=redis,
+            limiter=FixedWindow(max_requests=5, window=60),
+            prefix="rl:banks-connect",
+        )
+        return True
+    except Exception:
+        _upstash_limiters.clear()
+        return False
+
+_use_upstash: bool = _init_upstash()
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def _client_ip(request: Request) -> str:
     forwarded = request.headers.get("x-forwarded-for")
@@ -50,6 +97,10 @@ def _match_rule(path: str) -> tuple[str, int, int] | None:
     return None
 
 
+# ---------------------------------------------------------------------------
+# Middleware
+# ---------------------------------------------------------------------------
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         rule = _match_rule(request.url.path)
@@ -58,8 +109,24 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         rule_path, max_req, window = rule
         ip = _client_ip(request)
-        key = (ip, rule_path)
 
+        if _use_upstash:
+            try:
+                limiter = _upstash_limiters[rule_path]
+                result = limiter.limit(f"{ip}:{rule_path}")
+                if not result.allowed:
+                    return Response(
+                        content='{"detail":"Too Many Requests"}',
+                        status_code=429,
+                        media_type="application/json",
+                        headers={"Retry-After": str(window)},
+                    )
+                return await call_next(request)
+            except Exception:
+                pass  # Fall through to in-memory logic on any Upstash error
+
+        # In-memory fallback
+        key = (ip, rule_path)
         now = time.monotonic()
         state = _counters[key]
 
