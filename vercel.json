@@ -1,42 +1,13 @@
 {
   "version": 2,
   "functions": {
-    "scraper-service/api/scraper/israel/login.js": {
-      "maxDuration": 60
-    },
-    "scraper-service/api/scraper/israel/otp.js": {
-      "maxDuration": 60
-    },
-    "scraper-service/api/scraper/israel/accounts.js": {
-      "maxDuration": 60
-    },
-    "scraper-service/api/scraper/israel/transactions.js": {
+    "backend/api/index.py": {
       "maxDuration": 60
     }
   },
   "buildCommand": "cd frontend && npm install --legacy-peer-deps && CI=false GENERATE_SOURCEMAP=false NODE_OPTIONS=--max_old_space_size=4096 npm run build",
   "outputDirectory": "frontend/build",
   "routes": [
-    {
-      "src": "/api/scraper/israel/supported",
-      "dest": "scraper-service/api/scraper/israel/supported.js"
-    },
-    {
-      "src": "/api/scraper/israel/login",
-      "dest": "scraper-service/api/scraper/israel/login.js"
-    },
-    {
-      "src": "/api/scraper/israel/otp",
-      "dest": "scraper-service/api/scraper/israel/otp.js"
-    },
-    {
-      "src": "/api/scraper/israel/accounts",
-      "dest": "scraper-service/api/scraper/israel/accounts.js"
-    },
-    {
-      "src": "/api/scraper/israel/transactions",
-      "dest": "scraper-service/api/scraper/israel/transactions.js"
-    },
     {
       "src": "/api/(.*)",
       "dest": "backend/api/index.py"
