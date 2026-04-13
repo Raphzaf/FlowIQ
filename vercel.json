@@ -1,53 +1,31 @@
 {
   "version": 2,
-  "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
+    "backend/api/index.py": {
+      "runtime": "python3.12"
+    },
+    "scraper-service/api/scraper/israel/supported.js": {
+      "runtime": "nodejs20.x"
+    },
     "scraper-service/api/scraper/israel/login.js": {
+      "runtime": "nodejs20.x",
       "maxDuration": 60
     },
     "scraper-service/api/scraper/israel/otp.js": {
+      "runtime": "nodejs20.x",
       "maxDuration": 60
     },
     "scraper-service/api/scraper/israel/accounts.js": {
+      "runtime": "nodejs20.x",
       "maxDuration": 60
     },
     "scraper-service/api/scraper/israel/transactions.js": {
+      "runtime": "nodejs20.x",
       "maxDuration": 60
     }
   },
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "frontend/build"
-      }
-    },
-    {
-      "src": "backend/api/index.py",
-      "use": "@vercel/python"
-    },
-    {
-      "src": "scraper-service/api/scraper/israel/supported.js",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "scraper-service/api/scraper/israel/login.js",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "scraper-service/api/scraper/israel/otp.js",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "scraper-service/api/scraper/israel/accounts.js",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "scraper-service/api/scraper/israel/transactions.js",
-      "use": "@vercel/node"
-    }
-  ],
+  "buildCommand": "cd frontend && npm install --legacy-peer-deps && CI=false GENERATE_SOURCEMAP=false NODE_OPTIONS=--max_old_space_size=4096 npm run build",
+  "outputDirectory": "frontend/build",
   "routes": [
     {
       "src": "/api/scraper/israel/supported",
