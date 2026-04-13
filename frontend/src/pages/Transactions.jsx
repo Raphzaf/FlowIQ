@@ -98,7 +98,7 @@ const TransactionRow = ({ transaction, onEdit, onDelete, API, onCategoryChange }
 
   return (
     <div 
-      className="flex items-center gap-4 p-4 bg-white rounded-2xl border border-stone-100 hover:shadow-premium transition-all group animate-fade-in"
+      className="flex items-center gap-4 p-4 bg-white dark:bg-[#1C1917] rounded-2xl border border-stone-100 dark:border-[#292524] hover:shadow-premium transition-all group animate-fade-in"
       data-testid={`transaction-row-${transaction.id}`}
     >
       {/* Icon */}
@@ -111,10 +111,10 @@ const TransactionRow = ({ transaction, onEdit, onDelete, API, onCategoryChange }
 
       {/* Details */}
       <div className="flex-1 min-w-0">
-        <p className="font-medium text-stone-900 truncate">
+        <p className="font-medium text-stone-900 dark:text-stone-100 truncate">
           {transaction.merchant}
         </p>
-        <div className="flex items-center gap-2 text-sm text-stone-500">
+        <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400">
           <CategoryBadge
             transactionId={transaction.id || transaction._id}
             category={transaction.category || "Other"}
@@ -130,7 +130,7 @@ const TransactionRow = ({ transaction, onEdit, onDelete, API, onCategoryChange }
       {/* Amount */}
       <div className="text-right flex-shrink-0">
         <p className={`font-semibold text-lg tabular-nums ${
-          isIncome ? "text-emerald-600" : "text-stone-900"
+          isIncome ? "text-emerald-600" : "text-stone-900 dark:text-stone-100"
         }`}>
           {isIncome ? "+" : "-"}${transaction.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </p>
@@ -140,15 +140,15 @@ const TransactionRow = ({ transaction, onEdit, onDelete, API, onCategoryChange }
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
         <button
           onClick={() => onEdit(transaction)}
-          className="p-2 rounded-xl hover:bg-stone-100 transition-colors"
+          className="p-2 rounded-xl hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
           title="Edit"
           data-testid={`edit-${transaction.id}`}
         >
-          <Edit3 className="w-4 h-4 text-stone-400 hover:text-stone-600" />
+          <Edit3 className="w-4 h-4 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300" />
         </button>
         <button
           onClick={() => onDelete(transaction)}
-          className="p-2 rounded-xl hover:bg-rose-50 transition-colors"
+          className="p-2 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors"
           title="Delete"
           data-testid={`delete-${transaction.id}`}
         >
@@ -195,7 +195,7 @@ const EditModal = ({ transaction, open, onClose, onSave }) => {
         
         <div className="space-y-4 py-4">
           <div>
-            <label className="block text-sm font-medium text-stone-600 mb-2">Amount</label>
+            <label className="block text-sm font-medium text-stone-600 dark:text-stone-400 mb-2">Amount</label>
             <Input
               type="number"
               value={amount}
@@ -206,7 +206,7 @@ const EditModal = ({ transaction, open, onClose, onSave }) => {
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-stone-600 mb-2">Merchant</label>
+            <label className="block text-sm font-medium text-stone-600 dark:text-stone-400 mb-2">Merchant</label>
             <Input
               value={merchant}
               onChange={(e) => setMerchant(e.target.value)}
@@ -216,7 +216,7 @@ const EditModal = ({ transaction, open, onClose, onSave }) => {
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-stone-600 mb-2">Category</label>
+            <label className="block text-sm font-medium text-stone-600 dark:text-stone-400 mb-2">Category</label>
             <div className="flex flex-wrap gap-2">
               {CATEGORIES.filter(c => c.name !== "Income").map((cat) => (
                 <button
@@ -224,8 +224,8 @@ const EditModal = ({ transaction, open, onClose, onSave }) => {
                   onClick={() => setCategory(cat.name)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                     category === cat.name
-                      ? "bg-stone-900 text-white"
-                      : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                      ? "bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900"
+                      : "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
                   }`}
                 >
                   <cat.icon className="w-3.5 h-3.5" />
@@ -281,7 +281,7 @@ const DeleteModal = ({ transaction, open, onClose, onConfirm }) => {
             <AlertTriangle className="w-8 h-8 text-rose-500" />
           </div>
           <DialogTitle className="font-heading text-xl mb-2">Delete Transaction?</DialogTitle>
-          <p className="text-stone-500 text-sm">
+          <p className="text-stone-500 dark:text-stone-400 text-sm">
             This will permanently delete the ${transaction.amount} expense from {transaction.merchant}.
           </p>
         </div>
@@ -310,8 +310,8 @@ const FilterChip = ({ label, active, onClick, icon: Icon }) => (
     onClick={onClick}
     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all min-h-[44px] ${
       active
-        ? "bg-stone-900 text-white"
-        : "bg-white text-stone-600 border border-stone-200 hover:bg-stone-50"
+        ? "bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900"
+        : "bg-white dark:bg-[#1C1917] text-stone-600 dark:text-stone-400 border border-stone-200 dark:border-[#292524] hover:bg-stone-50 dark:hover:bg-stone-800"
     }`}
   >
     {Icon && <Icon className="w-3.5 h-3.5" />}
@@ -345,8 +345,8 @@ const CategoryMultiFilter = ({ value, onChange }) => {
         <button
           className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border text-sm font-medium transition-all min-h-[44px] ${
             value.length > 0
-              ? "border-stone-900 bg-stone-900 text-white"
-              : "border-stone-200 bg-white text-stone-600 hover:border-stone-300"
+              ? "border-stone-900 dark:border-stone-100 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900"
+              : "border-stone-200 dark:border-[#292524] bg-white dark:bg-[#1C1917] text-stone-600 dark:text-stone-400 hover:border-stone-300 dark:hover:border-stone-600"
           }`}
           data-testid="category-multifilter-trigger"
         >
@@ -379,10 +379,10 @@ const CategoryMultiFilter = ({ value, onChange }) => {
               })}
             </CommandGroup>
             {value.length > 0 && (
-              <div className="p-1 border-t border-stone-100">
+              <div className="p-1 border-t border-stone-100 dark:border-stone-700">
                 <button
                   onClick={() => { onChange([]); setOpen(false); }}
-                  className="w-full text-xs text-stone-500 hover:text-stone-800 py-1.5 px-3 rounded-lg hover:bg-stone-50 transition-colors"
+                  className="w-full text-xs text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 py-1.5 px-3 rounded-lg hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors"
                   data-testid="category-filter-clear"
                 >
                   Clear filter
@@ -530,10 +530,10 @@ const Transactions = () => {
     <div data-testid="transactions-page">
       {/* Page Header */}
       <div className="mb-8 animate-fade-in">
-        <h1 className="font-heading text-3xl lg:text-4xl font-bold text-stone-900 mb-2">
+        <h1 className="font-heading text-3xl lg:text-4xl font-bold text-stone-900 dark:text-stone-100 mb-2">
           Transaction History
         </h1>
-        <p className="text-stone-500">
+        <p className="text-stone-500 dark:text-stone-400">
           View, edit, and manage all your transactions
         </p>
       </div>
@@ -550,7 +550,7 @@ const Transactions = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search transactions..."
-                className="h-12 pl-12 rounded-xl border-stone-200 bg-white text-base"
+                className="h-12 pl-12 rounded-xl border-stone-200 dark:border-stone-700 bg-white dark:bg-[#1C1917] text-base"
                 data-testid="search-input"
               />
               {searchQuery && (
@@ -581,7 +581,7 @@ const Transactions = () => {
                 active={dateFilter === "month"}
                 onClick={() => setDateFilter("month")}
               />
-              <div className="w-px h-6 bg-stone-200 mx-1 self-center" />
+              <div className="w-px h-6 bg-stone-200 dark:bg-stone-700 mx-1 self-center" />
               <CategoryMultiFilter value={categoryFilter} onChange={setCategoryFilter} />
             </div>
           </div>
@@ -591,10 +591,10 @@ const Transactions = () => {
             {Object.keys(groupedTransactions).length === 0 ? (
               <div className="text-center py-16 animate-fade-in">
                 <Receipt className="w-16 h-16 text-stone-300 mx-auto mb-4" />
-                <h3 className="font-heading text-lg font-semibold text-stone-900 mb-2">
+                <h3 className="font-heading text-lg font-semibold text-stone-900 dark:text-stone-100 mb-2">
                   No transactions found
                 </h3>
-                <p className="text-stone-500 text-sm">
+                <p className="text-stone-500 dark:text-stone-400 text-sm">
                   {searchQuery || categoryFilter.length > 0
                     ? "Try adjusting your filters"
                     : "Add your first expense using the + button"}
@@ -609,14 +609,14 @@ const Transactions = () => {
                     return (
                       <div
                         key={transaction.id}
-                        className="flex items-center gap-3 p-3 bg-white rounded-2xl border border-stone-100 animate-fade-in"
+                        className="flex items-center gap-3 p-3 bg-white dark:bg-[#1C1917] rounded-2xl border border-stone-100 dark:border-[#292524] animate-fade-in"
                         data-testid={`transaction-mobile-${transaction.id}`}
                       >
-                        <div className="w-10 h-10 rounded-xl bg-stone-100 flex items-center justify-center flex-shrink-0 text-lg">
+                        <div className="w-10 h-10 rounded-xl bg-stone-100 dark:bg-stone-800 flex items-center justify-center flex-shrink-0 text-lg">
                           {getCategoryEmoji(transaction.category)}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-stone-900 truncate text-sm">
+                          <p className="font-medium text-stone-900 dark:text-stone-100 truncate text-sm">
                             {transaction.merchant}
                           </p>
                           <div className="flex items-center gap-1.5 mt-0.5">
@@ -644,7 +644,7 @@ const Transactions = () => {
                 <div className="hidden sm:block overflow-x-auto">
                   {Object.entries(groupedTransactions).map(([date, dayTransactions]) => (
                     <div key={date} className="animate-fade-in-up">
-                      <h3 className="font-medium text-stone-500 text-sm mb-3 px-1">
+                      <h3 className="font-medium text-stone-500 dark:text-stone-400 text-sm mb-3 px-1">
                         {formatDateHeader(date)}
                       </h3>
                       <div className="space-y-2">
@@ -672,7 +672,7 @@ const Transactions = () => {
           {/* Summary Card */}
           <Card className="card-premium rounded-3xl animate-fade-in-up" data-testid="summary-card">
             <CardContent className="p-6">
-              <h3 className="font-heading font-semibold text-stone-900 mb-4">
+              <h3 className="font-heading font-semibold text-stone-900 dark:text-stone-100 mb-4">
                 Summary
               </h3>
               
@@ -682,7 +682,7 @@ const Transactions = () => {
                     <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
                       <ArrowUpRight className="w-4 h-4 text-emerald-600" />
                     </div>
-                    <span className="text-sm text-stone-600">Income</span>
+                    <span className="text-sm text-stone-600 dark:text-stone-400">Income</span>
                   </div>
                   <span className="font-semibold text-emerald-600 tabular-nums">
                     +${totals.income.toLocaleString()}
@@ -694,16 +694,16 @@ const Transactions = () => {
                     <div className="w-8 h-8 rounded-lg bg-rose-100 flex items-center justify-center">
                       <ArrowDownRight className="w-4 h-4 text-rose-600" />
                     </div>
-                    <span className="text-sm text-stone-600">Expenses</span>
+                    <span className="text-sm text-stone-600 dark:text-stone-400">Expenses</span>
                   </div>
                   <span className="font-semibold text-rose-600 tabular-nums">
                     -${totals.expenses.toLocaleString()}
                   </span>
                 </div>
                 
-                <div className="pt-4 border-t border-stone-100">
+                <div className="pt-4 border-t border-stone-100 dark:border-stone-700">
                   <div className="flex items-center justify-between">
-                    <span className="font-medium text-stone-900">Net</span>
+                    <span className="font-medium text-stone-900 dark:text-stone-100">Net</span>
                     <span className={`font-bold text-lg tabular-nums ${
                       totals.net >= 0 ? "text-emerald-600" : "text-rose-600"
                     }`}>
@@ -723,17 +723,17 @@ const Transactions = () => {
           {/* Quick Stats */}
           <Card className="card-premium rounded-3xl animate-fade-in-up delay-150">
             <CardContent className="p-6">
-              <h3 className="font-heading font-semibold text-stone-900 mb-4">
+              <h3 className="font-heading font-semibold text-stone-900 dark:text-stone-100 mb-4">
                 Quick Stats
               </h3>
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span className="text-stone-500">Total transactions</span>
-                  <span className="font-semibold text-stone-900">{filteredTransactions.length}</span>
+                  <span className="text-stone-500 dark:text-stone-400">Total transactions</span>
+                  <span className="font-semibold text-stone-900 dark:text-stone-100">{filteredTransactions.length}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-stone-500">Avg. expense</span>
-                  <span className="font-semibold text-stone-900 tabular-nums">
+                  <span className="text-stone-500 dark:text-stone-400">Avg. expense</span>
+                  <span className="font-semibold text-stone-900 dark:text-stone-100 tabular-nums">
                     ${filteredTransactions.filter(t => t.type === "expense").length > 0
                       ? (totals.expenses / filteredTransactions.filter(t => t.type === "expense").length).toFixed(2)
                       : "0.00"}

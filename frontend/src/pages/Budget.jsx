@@ -100,8 +100,8 @@ const Budget = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 animate-fade-in">
         <div>
-          <h1 className="font-heading text-3xl lg:text-4xl font-bold text-stone-900 mb-1">Budgets</h1>
-          <p className="text-stone-500">Track your monthly spending against your goals</p>
+          <h1 className="font-heading text-3xl lg:text-4xl font-bold text-stone-900 dark:text-stone-100 mb-1">Budgets</h1>
+          <p className="text-stone-500 dark:text-stone-400">Track your monthly spending against your goals</p>
         </div>
         <div className="flex items-center gap-3">
           <Input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}
@@ -119,11 +119,11 @@ const Budget = () => {
         </div>
       ) : budgets.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 animate-fade-in" data-testid="budgets-empty">
-          <div className="w-20 h-20 rounded-3xl bg-stone-100 flex items-center justify-center mb-6">
-            <PiggyBank className="w-10 h-10 text-stone-400" />
+          <div className="w-20 h-20 rounded-3xl bg-stone-100 dark:bg-stone-800 flex items-center justify-center mb-6">
+            <PiggyBank className="w-10 h-10 text-stone-400 dark:text-stone-500" />
           </div>
-          <h3 className="font-heading text-xl font-semibold text-stone-900 mb-2">No budgets yet</h3>
-          <p className="text-stone-500 text-center max-w-sm mb-8">
+          <h3 className="font-heading text-xl font-semibold text-stone-900 dark:text-stone-100 mb-2">No budgets yet</h3>
+          <p className="text-stone-500 dark:text-stone-400 text-center max-w-sm mb-8">
             Set your first budget to start tracking your monthly spending by category.
           </p>
           <Button onClick={openAddDialog} className="rounded-full bg-stone-900 hover:bg-stone-800 h-12 px-8 gap-2">
@@ -149,7 +149,7 @@ const Budget = () => {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-stone-700">Category</label>
+              <label className="text-sm font-medium text-stone-700 dark:text-stone-300">Category</label>
               <Select value={formCategory} onValueChange={setFormCategory} disabled={!!editingBudget}>
                 <SelectTrigger className="h-12 rounded-xl" data-testid="budget-category-select">
                   <SelectValue placeholder="Select category…" />
@@ -160,15 +160,15 @@ const Budget = () => {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-stone-700">Budget amount (₪)</label>
+              <label className="text-sm font-medium text-stone-700 dark:text-stone-300">Budget amount (₪)</label>
               <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 font-medium">₪</span>
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 dark:text-stone-500 font-medium">₪</span>
                 <Input type="number" min="1" step="1" value={formAmount} onChange={e => setFormAmount(e.target.value)}
                   placeholder="0" className="h-12 rounded-xl pl-8" data-testid="budget-amount-input" />
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-stone-700">Month</label>
+              <label className="text-sm font-medium text-stone-700 dark:text-stone-300">Month</label>
               <Input type="month" value={formMonth} onChange={e => setFormMonth(e.target.value)}
                 className="h-12 rounded-xl" data-testid="budget-month-input" />
             </div>

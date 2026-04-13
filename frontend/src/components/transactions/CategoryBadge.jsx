@@ -29,21 +29,21 @@ const CATEGORIES = [
 ];
 
 const CATEGORY_CONFIG = {
-  Supermarket:   { emoji: "🛒", bg: "bg-emerald-100", text: "text-emerald-800" },
-  Restaurants:   { emoji: "🍔", bg: "bg-amber-100",   text: "text-amber-800"   },
-  Transport:     { emoji: "🚗", bg: "bg-indigo-100",  text: "text-indigo-800"  },
-  Utilities:     { emoji: "⚡", bg: "bg-yellow-100",  text: "text-yellow-800"  },
-  Shopping:      { emoji: "🛍️", bg: "bg-pink-100",    text: "text-pink-800"    },
-  Entertainment: { emoji: "🎬", bg: "bg-violet-100",  text: "text-violet-800"  },
-  Health:        { emoji: "💊", bg: "bg-teal-100",    text: "text-teal-800"    },
-  Housing:       { emoji: "🏠", bg: "bg-stone-100",   text: "text-stone-800"   },
-  Education:     { emoji: "📚", bg: "bg-cyan-100",    text: "text-cyan-800"    },
-  Travel:        { emoji: "✈️", bg: "bg-sky-100",     text: "text-sky-800"     },
-  Income:        { emoji: "💰", bg: "bg-green-100",   text: "text-green-800"   },
-  Other:         { emoji: "📦", bg: "bg-gray-100",    text: "text-gray-700"    },
+  Supermarket:   { emoji: "🛒", bg: "bg-emerald-100 dark:bg-emerald-900/40", text: "text-emerald-800 dark:text-emerald-300" },
+  Restaurants:   { emoji: "🍔", bg: "bg-amber-100 dark:bg-amber-900/40",   text: "text-amber-800 dark:text-amber-300"   },
+  Transport:     { emoji: "🚗", bg: "bg-indigo-100 dark:bg-indigo-900/40",  text: "text-indigo-800 dark:text-indigo-300"  },
+  Utilities:     { emoji: "⚡", bg: "bg-yellow-100 dark:bg-yellow-900/40",  text: "text-yellow-800 dark:text-yellow-300"  },
+  Shopping:      { emoji: "🛍️", bg: "bg-pink-100 dark:bg-pink-900/40",    text: "text-pink-800 dark:text-pink-300"    },
+  Entertainment: { emoji: "🎬", bg: "bg-violet-100 dark:bg-violet-900/40",  text: "text-violet-800 dark:text-violet-300"  },
+  Health:        { emoji: "💊", bg: "bg-teal-100 dark:bg-teal-900/40",    text: "text-teal-800 dark:text-teal-300"    },
+  Housing:       { emoji: "🏠", bg: "bg-stone-100 dark:bg-stone-700",   text: "text-stone-800 dark:text-stone-200"   },
+  Education:     { emoji: "📚", bg: "bg-cyan-100 dark:bg-cyan-900/40",    text: "text-cyan-800 dark:text-cyan-300"    },
+  Travel:        { emoji: "✈️", bg: "bg-sky-100 dark:bg-sky-900/40",     text: "text-sky-800 dark:text-sky-300"     },
+  Income:        { emoji: "💰", bg: "bg-green-100 dark:bg-green-900/40",   text: "text-green-800 dark:text-green-300"   },
+  Other:         { emoji: "📦", bg: "bg-gray-100 dark:bg-gray-700",    text: "text-gray-700 dark:text-gray-300"    },
 };
 
-const DEFAULT_CONFIG = { emoji: "📌", bg: "bg-stone-100", text: "text-stone-700" };
+const DEFAULT_CONFIG = { emoji: "📌", bg: "bg-stone-100 dark:bg-stone-700", text: "text-stone-700 dark:text-stone-300" };
 
 /**
  * CategoryBadge
