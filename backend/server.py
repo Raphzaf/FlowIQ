@@ -328,6 +328,119 @@ async def db_upsert_profile(profile: Dict[str, Any]) -> Dict[str, Any]:
     saved = await db.user_profiles.find_one({"user_id": profile["user_id"]}, {"_id": 0})
     return saved or profile
 
+
+# ── BUDGETS DB HELPERS ────────────────────────────────────────────────────────
+#
+# Supabase SQL (run once to create the table):
+# create table if not exists budgets (
+#   id uuid primary key default gen_random_uuid(),
+#   user_id text not null,
+#   category text not null,
+#   amount_ils numeric not null,
+#   month text not null,  -- format: YYYY-MM
+#   created_at timestamptz default now(),
+#   updated_at timestamptz default now(),
+#   unique(user_id, category, month)
+# );
+
+
+async def db_list_budgets(user_id: str, month: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Return budgets for a user, optionally filtered by month (YYYY-MM)."""
+    if use_supabase:
+        query = supabase.table("budgets").select("*").eq("user_id", user_id)
+        if month:
+            query = query.eq("month", month)
+        response = query.execute()
+        rows = response.data or []
+        # Normalise id field
+        for row in rows:
+            row.setdefault("id", row.get("id", ""))
+        return rows
+
+    mongo_query: Dict[str, Any] = {"user_id": user_id}
+    if month:
+        mongo_query["month"] = month
+    cursor = db["budgets"].find(mongo_query)
+    rows = await cursor.to_list(None)
+    for row in rows:
+        row["id"] = str(row.pop("_id"))
+    return rows
+
+
+async def db_upsert_budget(user_id: str, category: str, amount_ils: float, month: str) -> Dict[str, Any]:
+    """Create or update a budget for (user_id, category, month)."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    if use_supabase:
+        payload = {
+            "user_id": user_id,
+            "category": category,
+            "amount_ils": amount_ils,
+            "month": month,
+            "updated_at": now_iso,
+        }
+        response = (
+            supabase.table("budgets")
+            .upsert(payload, on_conflict="user_id,category,month")
+            .execute()
+        )
+        rows = response.data or []
+        if rows:
+            return rows[0]
+        # Fallback: fetch the record
+        fetch = (
+            supabase.table("budgets")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("category", category)
+            .eq("month", month)
+            .limit(1)
+            .execute()
+        )
+        return (fetch.data or [{}])[0]
+
+    # MongoDB path
+    doc = {
+        "user_id": user_id,
+        "category": category,
+        "amount_ils": amount_ils,
+        "month": month,
+        "updated_at": now_iso,
+    }
+    result = await db["budgets"].update_one(
+        {"user_id": user_id, "category": category, "month": month},
+        {"$set": doc, "$setOnInsert": {"created_at": now_iso}},
+        upsert=True,
+    )
+    saved = await db["budgets"].find_one(
+        {"user_id": user_id, "category": category, "month": month}
+    )
+    if saved:
+        saved["id"] = str(saved.pop("_id"))
+    return saved or doc
+
+
+async def db_delete_budget(budget_id: str, user_id: str) -> int:
+    """Delete a budget by id, scoped to user_id. Returns deleted count."""
+    if use_supabase:
+        response = (
+            supabase.table("budgets")
+            .delete()
+            .eq("id", budget_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        return len(response.data or [])
+
+    from bson import ObjectId
+    try:
+        oid = ObjectId(budget_id)
+    except Exception:
+        return 0
+    result = await db["budgets"].delete_one({"_id": oid, "user_id": user_id})
+    return result.deleted_count
+
+
 # Define Models
 class Transaction(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -1919,6 +2032,115 @@ async def startup_bank_scheduler():
         sync_interval_hours=int(os.environ.get("ISRAEL_BANKS_SYNC_HOURS", "6")),
     )
     _scheduler.start()
+
+
+# ── BUDGETS ──────────────────────────────────────────────────────────────────
+
+@api_router.get("/budgets/summary")
+async def budgets_summary(
+    request: Request,
+    month: Optional[str] = None,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    """
+    For each budget this month, return how much was spent vs budgeted.
+    Query param: month (YYYY-MM, default = current month)
+    """
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    if not month:
+        month = datetime.now(timezone.utc).strftime("%Y-%m")
+
+    budgets = await db_list_budgets(user_id, month=month)
+    transactions = await db_get_transactions(user_id=user_id, limit=5000)
+
+    # Sum expenses by category for the given month
+    spending: Dict[str, float] = {}
+    for t in transactions:
+        if t.get("type") != "expense":
+            continue
+        date_str = t.get("date", "")
+        if not date_str.startswith(month):
+            continue
+        cat = t.get("category", "")
+        spending[cat] = spending.get(cat, 0.0) + float(t.get("amount", 0))
+
+    result = []
+    for b in budgets:
+        budget_amount = float(b.get("amount_ils", 0))
+        cat = b.get("category", "")
+        spent = spending.get(cat, 0.0)
+        remaining = budget_amount - spent
+        percentage = (spent / budget_amount * 100) if budget_amount > 0 else 0.0
+        if percentage > 100:
+            status = "exceeded"
+        elif percentage > 80:
+            status = "warning"
+        else:
+            status = "ok"
+        result.append({
+            "id": b.get("id", ""),
+            "category": cat,
+            "budget_amount": budget_amount,
+            "spent_amount": round(spent, 2),
+            "remaining": round(remaining, 2),
+            "percentage": round(percentage, 1),
+            "status": status,
+            "month": b.get("month", month),
+        })
+
+    result.sort(key=lambda x: x["percentage"], reverse=True)
+    return result
+
+
+@api_router.get("/budgets")
+async def list_budgets(
+    request: Request,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    """List all budgets for the current user."""
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    return await db_list_budgets(user_id)
+
+
+@api_router.post("/budgets")
+async def upsert_budget(
+    request: Request,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    """Create or update a budget for a category+month combination."""
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    body = await request.json()
+    category = body.get("category", "").strip()
+    amount_ils = body.get("amount_ils")
+    month = body.get("month", "").strip()
+
+    if not category:
+        raise HTTPException(status_code=422, detail="category is required")
+    if amount_ils is None or float(amount_ils) <= 0:
+        raise HTTPException(status_code=422, detail="amount_ils must be a positive number")
+    if not month:
+        raise HTTPException(status_code=422, detail="month is required (YYYY-MM)")
+
+    saved = await db_upsert_budget(user_id, category, float(amount_ils), month)
+    return saved
+
+
+@api_router.delete("/budgets/{budget_id}")
+async def delete_budget(
+    budget_id: str,
+    request: Request,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    """Delete a budget by ID."""
+    user_id = await _resolve_user_id(x_user_id, authorization)
+    deleted = await db_delete_budget(budget_id, user_id)
+    if deleted == 0:
+        raise HTTPException(status_code=404, detail="Budget not found")
+    return {"message": "Budget deleted"}
 
 
 # Include the router in the main app
