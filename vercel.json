@@ -3,20 +3,16 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "scraper-service/api/scraper/israel/login.js": {
-      "maxDuration": 60,
-      "_note": "Browser-based scraping requires 30-120s. maxDuration 60 requires Vercel Pro. Hobby plan limit is 10s. Alternative: deploy scraper on Railway/Fly.io and set SCRAPER_SERVICE_URL."
+      "maxDuration": 60
     },
     "scraper-service/api/scraper/israel/otp.js": {
-      "maxDuration": 60,
-      "_note": "See login.js note above."
+      "maxDuration": 60
     },
     "scraper-service/api/scraper/israel/accounts.js": {
-      "maxDuration": 60,
-      "_note": "See login.js note above."
+      "maxDuration": 60
     },
     "scraper-service/api/scraper/israel/transactions.js": {
-      "maxDuration": 60,
-      "_note": "See login.js note above."
+      "maxDuration": 60
     }
   },
   "builds": [
