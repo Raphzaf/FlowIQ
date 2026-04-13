@@ -12,7 +12,6 @@ const tabs = [
 const BottomNav = () => (
   <nav
     className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-xl border-t border-stone-200/70 pb-safe"
-    style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     data-testid="bottom-nav"
   >
     <div className="flex h-16 items-stretch">

@@ -130,6 +130,8 @@ const InstallAppBanner = () => {
 };
 
 // Category colors - Premium palette
+const MOBILE_BREAKPOINT = 768;
+
 const CATEGORY_COLORS = {
   "Food & Dining": "#F43F5E",
   "Transport": "#6366F1",
@@ -412,13 +414,13 @@ const SpendingChart = ({ data, loading }) => {
                 dataKey="month" 
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: '#A8A29E', fontSize: windowWidth < 768 ? 10 : 12, fontWeight: 500 }}
+                tick={{ fill: '#A8A29E', fontSize: windowWidth < MOBILE_BREAKPOINT ? 10 : 12, fontWeight: 500 }}
                 dy={8}
               />
               <YAxis 
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: '#A8A29E', fontSize: windowWidth < 768 ? 10 : 12 }}
+                tick={{ fill: '#A8A29E', fontSize: windowWidth < MOBILE_BREAKPOINT ? 10 : 12 }}
                 tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
                 dx={-8}
               />
