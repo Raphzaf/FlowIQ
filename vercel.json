@@ -1,7 +1,7 @@
 {
   "version": 2,
   "functions": {
-    "backend/api/index.py": {
+    "api/index.py": {
       "maxDuration": 60
     }
   },
@@ -10,7 +10,7 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "backend/api/index.py"
+      "dest": "api/index.py"
     },
     {
       "handle": "filesystem"
