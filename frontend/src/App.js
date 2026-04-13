@@ -19,6 +19,7 @@ import {
   PlayCircle
 } from "lucide-react";
 import { useDemoMode } from "./hooks/useDemoMode";
+import BottomNav from "./components/layout/BottomNav";
 import {
   demoTransactions,
   demoDashboardData,
@@ -692,7 +693,7 @@ function App() {
               onExitDemo={() => { exitDemoMode(); window.location.reload(); }}
             />
           )}
-          <main className={onboardingCompleted ? "max-w-7xl mx-auto px-3 sm:px-5 lg:px-8 py-6 lg:py-10" : ""}>
+          <main className={onboardingCompleted ? "max-w-7xl mx-auto px-3 sm:px-5 lg:px-8 py-6 lg:py-10 pb-24 md:pb-10" : ""}>
             <Routes>
               {/* Onboarding route — always accessible */}
               <Route path="/onboarding" element={<OnboardingPage />} />
@@ -731,6 +732,7 @@ function App() {
           {/* Quick Entry FAB and Drawer — only when onboarding is done */}
           {onboardingCompleted && (
             <>
+              <BottomNav />
               <QuickEntryFAB onClick={() => setQuickEntryOpen(true)} />
               <QuickEntryDrawer 
                 open={quickEntryOpen} 

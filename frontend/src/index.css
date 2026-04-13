@@ -518,3 +518,11 @@
         display: contents !important;
     }
 }
+
+/* Mobile responsive fixes */
+@media (max-width: 767px) {
+  input[type="text"], input[type="email"], input[type="password"], input[type="number"], input[type="search"], input[type="tel"], textarea, select { font-size: 16px !important; }
+}
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+.touch-target { min-height: 44px; min-width: 44px; }

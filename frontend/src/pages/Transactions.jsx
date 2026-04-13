@@ -48,6 +48,21 @@ const CATEGORIES = [
   { name: "Income", icon: ArrowUpRight, color: "#10B981" },
 ];
 
+// Category emoji helper
+const CATEGORY_EMOJIS = {
+  "Food & Dining": "🍽️",
+  "Supermarket": "🛒",
+  "Restaurants": "🍴",
+  "Transport": "🚗",
+  "Shopping": "🛍️",
+  "Entertainment": "🎬",
+  "Bills & Utilities": "💡",
+  "Health": "❤️",
+  "Income": "💰",
+  "Uncategorized": "📌",
+};
+const getCategoryEmoji = (cat) => CATEGORY_EMOJIS[cat] || "📌";
+
 // Skeleton
 const Skeleton = ({ className }) => (
   <div className={`skeleton ${className}`} />
@@ -277,7 +292,7 @@ const DeleteModal = ({ transaction, open, onClose, onConfirm }) => {
 const FilterChip = ({ label, active, onClick, icon: Icon }) => (
   <button
     onClick={onClick}
-    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all min-h-[44px] ${
       active
         ? "bg-stone-900 text-white"
         : "bg-white text-stone-600 border border-stone-200 hover:bg-stone-50"
@@ -424,7 +439,7 @@ const Transactions = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search transactions..."
-                className="h-12 pl-12 rounded-xl border-stone-200 bg-white"
+                className="h-12 pl-12 rounded-xl border-stone-200 bg-white text-base"
                 data-testid="search-input"
               />
               {searchQuery && (
@@ -483,23 +498,59 @@ const Transactions = () => {
                 </p>
               </div>
             ) : (
-              Object.entries(groupedTransactions).map(([date, dayTransactions]) => (
-                <div key={date} className="animate-fade-in-up">
-                  <h3 className="font-medium text-stone-500 text-sm mb-3 px-1">
-                    {formatDateHeader(date)}
-                  </h3>
-                  <div className="space-y-2">
-                    {dayTransactions.map((transaction) => (
-                      <TransactionRow
+              <>
+                {/* Mobile card view */}
+                <div className="sm:hidden space-y-2">
+                  {filteredTransactions.map((transaction) => {
+                    const isIncome = transaction.type === "income";
+                    return (
+                      <div
                         key={transaction.id}
-                        transaction={transaction}
-                        onEdit={setEditingTransaction}
-                        onDelete={setDeletingTransaction}
-                      />
-                    ))}
-                  </div>
+                        className="flex items-center gap-3 p-3 bg-white rounded-2xl border border-stone-100 animate-fade-in"
+                        data-testid={`transaction-mobile-${transaction.id}`}
+                      >
+                        <div className="w-10 h-10 rounded-xl bg-stone-100 flex items-center justify-center flex-shrink-0 text-lg">
+                          {getCategoryEmoji(transaction.category)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-stone-900 truncate text-sm">
+                            {transaction.merchant}
+                          </p>
+                          <p className="text-xs text-stone-500 truncate">
+                            {transaction.category} · {transaction.date}
+                          </p>
+                        </div>
+                        <p className={`font-semibold text-sm tabular-nums flex-shrink-0 ${
+                          isIncome ? "text-emerald-600" : "text-rose-600"
+                        }`}>
+                          {isIncome ? "+" : "-"}${transaction.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))
+
+                {/* Desktop list view */}
+                <div className="hidden sm:block overflow-x-auto">
+                  {Object.entries(groupedTransactions).map(([date, dayTransactions]) => (
+                    <div key={date} className="animate-fade-in-up">
+                      <h3 className="font-medium text-stone-500 text-sm mb-3 px-1">
+                        {formatDateHeader(date)}
+                      </h3>
+                      <div className="space-y-2">
+                        {dayTransactions.map((transaction) => (
+                          <TransactionRow
+                            key={transaction.id}
+                            transaction={transaction}
+                            onEdit={setEditingTransaction}
+                            onDelete={setDeletingTransaction}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         </div>

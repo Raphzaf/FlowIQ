@@ -183,7 +183,7 @@ const PersonalityCard = ({ personality }) => {
 
   return (
     <div 
-      className={`rounded-3xl bg-gradient-to-br ${gradient} p-8 text-white shadow-premium-lg animate-fade-in-up`}
+      className={`rounded-3xl bg-gradient-to-br ${gradient} p-5 sm:p-8 text-white shadow-premium-lg animate-fade-in-up`}
       data-testid="personality-card"
     >
       {/* Header */}
@@ -263,7 +263,7 @@ const HealthScoreCard = ({ healthScore }) => {
 
   return (
     <Card className="card-premium rounded-3xl overflow-hidden animate-fade-in-up delay-100" data-testid="health-score-card">
-      <CardContent className="p-8">
+      <CardContent className="p-5 sm:p-8">
         {/* Header */}
         <div className="flex items-center gap-3 mb-8">
           <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-rose-100 to-pink-100 flex items-center justify-center">
@@ -366,14 +366,14 @@ const EmptyState = () => (
 
 // Loading State
 const LoadingState = () => (
-  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6" data-testid="insights-loading">
-    <div className="lg:col-span-7 space-y-4">
+  <div className="grid grid-cols-1 md:grid-cols-12 gap-6" data-testid="insights-loading">
+    <div className="md:col-span-7 space-y-4">
       <Skeleton className="h-8 w-48 mb-6" />
       {[1, 2, 3, 4].map((i) => (
         <Skeleton key={i} className="h-32 w-full rounded-2xl" />
       ))}
     </div>
-    <div className="lg:col-span-5 space-y-6">
+    <div className="md:col-span-5 space-y-6">
       <Skeleton className="h-80 w-full rounded-3xl" />
       <Skeleton className="h-96 w-full rounded-3xl" />
     </div>
@@ -432,9 +432,9 @@ const Insights = () => {
       ) : !hasData ? (
         <EmptyState />
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-8">
           {/* Left Column - Insights */}
-          <div className="lg:col-span-7 space-y-4">
+          <div className="md:col-span-7 space-y-4">
             <div className="flex items-center gap-2 mb-4 animate-fade-in">
               <Sparkles className="w-5 h-5 text-violet-500" />
               <h2 className="font-heading text-lg font-semibold text-stone-900">
@@ -448,7 +448,7 @@ const Insights = () => {
           </div>
 
           {/* Right Column - Personality & Health */}
-          <div className="lg:col-span-5 space-y-6">
+          <div className="md:col-span-5 space-y-6">
             <PersonalityCard personality={data.personality} />
             <HealthScoreCard healthScore={data.health_score} />
           </div>

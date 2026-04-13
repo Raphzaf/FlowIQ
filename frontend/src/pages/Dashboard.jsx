@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useApi } from "../App";
+import useWindowWidth from "../hooks/useWindowWidth";
 import { Card, CardContent } from "../components/ui/card";
 import { 
   Wallet, 
@@ -129,6 +130,8 @@ const InstallAppBanner = () => {
 };
 
 // Category colors - Premium palette
+const MOBILE_BREAKPOINT = 768;
+
 const CATEGORY_COLORS = {
   "Food & Dining": "#F43F5E",
   "Transport": "#6366F1",
@@ -221,7 +224,7 @@ const formatCurrency = (amount, compact = false) => {
 const HeroBalanceCard = ({ data, loading }) => {
   if (loading) {
     return (
-      <div className="col-span-full lg:col-span-8 card-hero rounded-3xl p-8 lg:p-10" data-testid="balance-card-loading">
+      <div className="col-span-full md:col-span-8 card-hero rounded-3xl p-5 sm:p-8 lg:p-10" data-testid="balance-card-loading">
         <Skeleton className="h-5 w-32 mb-4" dark />
         <Skeleton className="h-16 w-64 mb-8" dark />
         <div className="flex gap-8">
@@ -236,7 +239,7 @@ const HeroBalanceCard = ({ data, loading }) => {
 
   return (
     <div 
-      className="col-span-full lg:col-span-8 card-hero rounded-3xl p-8 lg:p-10 text-white animate-fade-in-up"
+      className="col-span-full md:col-span-8 card-hero rounded-3xl p-5 sm:p-8 lg:p-10 text-white animate-fade-in-up"
       data-testid="balance-card"
     >
       <div className="relative z-10">
@@ -292,8 +295,8 @@ const HeroBalanceCard = ({ data, loading }) => {
 const CashflowCard = ({ cashflow, loading }) => {
   if (loading) {
     return (
-      <Card className="col-span-full lg:col-span-4 card-premium rounded-3xl" data-testid="cashflow-card-loading">
-        <CardContent className="p-6 lg:p-8">
+      <Card className="col-span-full md:col-span-4 card-premium rounded-3xl" data-testid="cashflow-card-loading">
+        <CardContent className="p-4 sm:p-6 lg:p-8">
           <Skeleton className="h-4 w-36 mb-6" />
           <Skeleton className="h-12 w-32 mb-4" />
           <Skeleton className="h-20 w-full" />
@@ -307,12 +310,12 @@ const CashflowCard = ({ cashflow, loading }) => {
 
   return (
     <Card 
-      className={`col-span-full lg:col-span-4 card-premium rounded-3xl overflow-hidden animate-fade-in-up delay-100 ${
+      className={`col-span-full md:col-span-4 card-premium rounded-3xl overflow-hidden animate-fade-in-up delay-100 ${
         isWarning ? 'ring-1 ring-rose-200' : ''
       }`}
       data-testid="cashflow-card"
     >
-      <CardContent className="p-6 lg:p-8">
+      <CardContent className="p-4 sm:p-6 lg:p-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
@@ -359,10 +362,11 @@ const CashflowCard = ({ cashflow, loading }) => {
 
 // Monthly Spending Chart - Premium Design
 const SpendingChart = ({ data, loading }) => {
+  const windowWidth = useWindowWidth();
   if (loading) {
     return (
-      <Card className="col-span-full lg:col-span-8 card-premium rounded-3xl" data-testid="spending-chart-loading">
-        <CardContent className="p-6 lg:p-8">
+      <Card className="col-span-full md:col-span-8 card-premium rounded-3xl" data-testid="spending-chart-loading">
+        <CardContent className="p-4 sm:p-6 lg:p-8">
           <Skeleton className="h-6 w-44 mb-8" />
           <Skeleton className="h-72 w-full rounded-2xl" />
         </CardContent>
@@ -388,8 +392,8 @@ const SpendingChart = ({ data, loading }) => {
   };
 
   return (
-    <Card className="col-span-full lg:col-span-8 card-premium rounded-3xl animate-fade-in-up delay-150" data-testid="spending-chart">
-      <CardContent className="p-6 lg:p-8">
+    <Card className="col-span-full md:col-span-8 card-premium rounded-3xl animate-fade-in-up delay-150" data-testid="spending-chart">
+      <CardContent className="p-4 sm:p-6 lg:p-8">
         <div className="flex items-center justify-between mb-8">
           <h3 className="font-heading text-lg font-semibold text-stone-900">
             Monthly Spending
@@ -397,7 +401,7 @@ const SpendingChart = ({ data, loading }) => {
           <span className="text-sm text-stone-500">Last 6 months</span>
         </div>
         
-        <div className="h-72">
+        <div className="h-56 md:h-72">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} barCategoryGap="25%">
               <defs>
@@ -410,13 +414,13 @@ const SpendingChart = ({ data, loading }) => {
                 dataKey="month" 
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: '#A8A29E', fontSize: 12, fontWeight: 500 }}
+                tick={{ fill: '#A8A29E', fontSize: windowWidth < MOBILE_BREAKPOINT ? 10 : 12, fontWeight: 500 }}
                 dy={8}
               />
               <YAxis 
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: '#A8A29E', fontSize: 12 }}
+                tick={{ fill: '#A8A29E', fontSize: windowWidth < MOBILE_BREAKPOINT ? 10 : 12 }}
                 tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
                 dx={-8}
               />
@@ -439,8 +443,8 @@ const SpendingChart = ({ data, loading }) => {
 const CategoryChart = ({ data, loading }) => {
   if (loading) {
     return (
-      <Card className="col-span-full lg:col-span-4 card-premium rounded-3xl" data-testid="category-chart-loading">
-        <CardContent className="p-6 lg:p-8">
+      <Card className="col-span-full md:col-span-4 card-premium rounded-3xl" data-testid="category-chart-loading">
+        <CardContent className="p-4 sm:p-6 lg:p-8">
           <Skeleton className="h-6 w-36 mb-8" />
           <div className="flex justify-center">
             <Skeleton className="h-48 w-48 rounded-full" />
@@ -464,14 +468,14 @@ const CategoryChart = ({ data, loading }) => {
   const total = chartData.reduce((sum, item) => sum + item.value, 0);
 
   return (
-    <Card className="col-span-full lg:col-span-4 card-premium rounded-3xl animate-fade-in-up delay-200" data-testid="category-chart">
-      <CardContent className="p-6 lg:p-8">
+    <Card className="col-span-full md:col-span-4 card-premium rounded-3xl animate-fade-in-up delay-200" data-testid="category-chart">
+      <CardContent className="p-4 sm:p-6 lg:p-8">
         <h3 className="font-heading text-lg font-semibold text-stone-900 mb-6">
           Spending by Category
         </h3>
         
         {/* Donut Chart */}
-        <div className="h-52 mb-6">
+        <div className="h-44 md:h-52 mb-4 md:mb-6">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -539,7 +543,7 @@ const QuickInsights = ({ insights, loading }) => {
   if (loading) {
     return (
       <Card className="col-span-full card-premium rounded-3xl" data-testid="quick-insights-loading">
-        <CardContent className="p-6 lg:p-8">
+        <CardContent className="p-4 sm:p-6 lg:p-8">
           <Skeleton className="h-6 w-40 mb-6" />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {[1, 2, 3].map((i) => (
@@ -581,7 +585,7 @@ const QuickInsights = ({ insights, loading }) => {
 
   return (
     <Card className="col-span-full card-premium rounded-3xl animate-fade-in-up delay-250" data-testid="quick-insights">
-      <CardContent className="p-6 lg:p-8">
+      <CardContent className="p-4 sm:p-6 lg:p-8">
         <div className="flex items-center justify-between mb-6">
           <h3 className="font-heading text-lg font-semibold text-stone-900">
             Quick Insights
@@ -686,7 +690,7 @@ const Dashboard = () => {
       </div>
 
       {/* Bento Grid Layout */}
-      <div className="grid grid-cols-12 gap-5 lg:gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-5 lg:gap-6">
         {/* Install App Banner */}
         <InstallAppBanner />
 
