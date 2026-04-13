@@ -67,7 +67,7 @@ const Navigation = ({ onSignOut }) => {
 
   return (
     <header 
-      className={`sticky top-0 z-50 w-full transition-all duration-300 ${
+      className={`mobile-safe-top sticky top-0 z-50 w-full transition-all duration-300 ${
         scrolled 
           ? 'bg-white/80 backdrop-blur-xl shadow-sm border-b border-stone-200/50' 
           : 'bg-transparent'
