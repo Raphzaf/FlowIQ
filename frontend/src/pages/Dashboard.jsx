@@ -33,6 +33,16 @@ import {
 } from "recharts";
 import { Link } from "react-router-dom";
 
+// Chart color constants for dark/light mode
+const CHART_TICK_COLOR_LIGHT = '#A8A29E';
+const CHART_TICK_COLOR_DARK = '#57534E';
+const TOOLTIP_BG_LIGHT = 'rgba(255, 255, 255, 0.98)';
+const TOOLTIP_BG_DARK = 'rgba(28, 25, 23, 0.98)';
+const TOOLTIP_BORDER_LIGHT = '1px solid rgba(0,0,0,0.05)';
+const TOOLTIP_BORDER_DARK = '1px solid rgba(41, 37, 36, 0.8)';
+const TOOLTIP_COLOR_LIGHT = '#1C1917';
+const TOOLTIP_COLOR_DARK = '#F5F5F4';
+
 // Install App Banner Component
 const InstallAppBanner = () => {
   const [show, setShow] = useState(false);
@@ -416,13 +426,13 @@ const SpendingChart = ({ data, loading }) => {
                 dataKey="month" 
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: theme === 'dark' ? '#57534E' : '#A8A29E', fontSize: windowWidth < MOBILE_BREAKPOINT ? 10 : 12, fontWeight: 500 }}
+                tick={{ fill: theme === 'dark' ? CHART_TICK_COLOR_DARK : CHART_TICK_COLOR_LIGHT, fontSize: windowWidth < MOBILE_BREAKPOINT ? 10 : 12, fontWeight: 500 }}
                 dy={8}
               />
               <YAxis 
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: theme === 'dark' ? '#57534E' : '#A8A29E', fontSize: windowWidth < MOBILE_BREAKPOINT ? 10 : 12 }}
+                tick={{ fill: theme === 'dark' ? CHART_TICK_COLOR_DARK : CHART_TICK_COLOR_LIGHT, fontSize: windowWidth < MOBILE_BREAKPOINT ? 10 : 12 }}
                 tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
                 dx={-8}
               />
@@ -501,11 +511,11 @@ const CategoryChart = ({ data, loading }) => {
               <Tooltip 
                 formatter={(value) => formatCurrency(value)}
                 contentStyle={{
-                  backgroundColor: theme === 'dark' ? 'rgba(28, 25, 23, 0.98)' : 'rgba(255, 255, 255, 0.95)',
-                  border: theme === 'dark' ? '1px solid rgba(41, 37, 36, 0.8)' : '1px solid rgba(0,0,0,0.05)',
+                  backgroundColor: theme === 'dark' ? TOOLTIP_BG_DARK : TOOLTIP_BG_LIGHT,
+                  border: theme === 'dark' ? TOOLTIP_BORDER_DARK : TOOLTIP_BORDER_LIGHT,
                   borderRadius: '12px',
                   boxShadow: '0 8px 24px rgba(0, 0, 0, 0.08)',
-                  color: theme === 'dark' ? '#F5F5F4' : '#1C1917',
+                  color: theme === 'dark' ? TOOLTIP_COLOR_DARK : TOOLTIP_COLOR_LIGHT,
                 }}
               />
             </PieChart>
