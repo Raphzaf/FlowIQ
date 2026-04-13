@@ -4,6 +4,8 @@ import { BrowserRouter, Routes, Route, NavLink, useLocation } from "react-router
 import axios from "axios";
 import { Toaster, toast } from "sonner";
 import { supabase, hasSupabaseEnv, supabaseConfigError } from "./lib/supabaseClient";
+import { Button } from "./components/ui/button";
+import { useInstallPrompt } from "./hooks/useInstallPrompt";
 import { 
   LayoutDashboard, 
   Lightbulb, 
@@ -14,7 +16,8 @@ import {
   History,
   User,
   LogOut,
-  ShieldCheck
+  ShieldCheck,
+  Download
 } from "lucide-react";
 
 // Pages
@@ -39,6 +42,7 @@ const Navigation = ({ onSignOut }) => {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const { isInstallable, promptInstall } = useInstallPrompt();
   
   // Detect scroll for nav styling
   useEffect(() => {
@@ -56,6 +60,10 @@ const Navigation = ({ onSignOut }) => {
     { path: "/upload", label: "Upload", icon: Upload },
     { path: "/profile", label: "Profile", icon: User },
   ];
+
+  const handleInstallApp = async () => {
+    await promptInstall();
+  };
 
   return (
     <header 
@@ -104,6 +112,18 @@ const Navigation = ({ onSignOut }) => {
               );
             })}
             </nav>
+            {isInstallable && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={handleInstallApp}
+                className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-stone-700 hover:bg-stone-100"
+                data-testid="install-app-btn"
+              >
+                <Download className="w-4 h-4" />
+                <span className="hidden lg:inline">Install App</span>
+              </Button>
+            )}
             <button
               onClick={onSignOut}
               className="inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium text-stone-600 hover:text-stone-900 hover:bg-stone-100 transition-all"
@@ -115,17 +135,33 @@ const Navigation = ({ onSignOut }) => {
           </div>
 
           {/* Mobile menu button */}
-          <button
-            className="md:hidden w-10 h-10 rounded-xl flex items-center justify-center hover:bg-stone-100 transition-colors"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            data-testid="mobile-menu-btn"
-          >
-            {mobileMenuOpen ? (
-              <X className="w-5 h-5 text-stone-700" />
-            ) : (
-              <Menu className="w-5 h-5 text-stone-700" />
+          <div className="md:hidden flex items-center gap-1">
+            {isInstallable && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={handleInstallApp}
+                className="rounded-xl text-stone-700 hover:bg-stone-100"
+                data-testid="mobile-install-app-btn"
+                aria-label="Install App"
+              >
+                <Download className="w-5 h-5" />
+                <span className="sr-only">Install App</span>
+              </Button>
             )}
-          </button>
+            <button
+              className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-stone-100 transition-colors"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              data-testid="mobile-menu-btn"
+            >
+              {mobileMenuOpen ? (
+                <X className="w-5 h-5 text-stone-700" />
+              ) : (
+                <Menu className="w-5 h-5 text-stone-700" />
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Mobile Navigation */}

@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useApi } from "../App";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -10,55 +11,153 @@ import {
   DialogTitle,
   DialogFooter,
 } from "../components/ui/dialog";
-import { 
-  Search, 
-  Filter, 
-  Calendar,
-  Coffee, 
-  Car, 
-  ShoppingBag, 
-  CreditCard, 
-  Film, 
-  Zap, 
-  Heart, 
+import {
+  Coffee,
+  Car,
+  ShoppingBag,
+  CreditCard,
+  Film,
+  Zap,
+  Heart,
   Plane,
   Receipt,
   Trash2,
   Edit3,
   ArrowUpRight,
   ArrowDownRight,
-  X,
-  Check,
-  AlertTriangle
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import axios from "axios";
 import { WeeklyBudgetWidget } from "./QuickEntry";
+import TransactionFilters from "../components/transactions/TransactionFilters";
+import useTransactionFilters from "../hooks/useTransactionFilters";
 
-// Category configuration
 const CATEGORIES = [
-  { name: "Food & Dining", icon: Coffee, color: "#F43F5E" },
-  { name: "Transport", icon: Car, color: "#6366F1" },
-  { name: "Shopping", icon: ShoppingBag, color: "#10B981" },
-  { name: "Subscriptions", icon: CreditCard, color: "#F59E0B" },
-  { name: "Entertainment", icon: Film, color: "#EC4899" },
-  { name: "Bills & Utilities", icon: Zap, color: "#8B5CF6" },
-  { name: "Health", icon: Heart, color: "#14B8A6" },
-  { name: "Travel", icon: Plane, color: "#0EA5E9" },
-  { name: "Income", icon: ArrowUpRight, color: "#10B981" },
+  { name: "Food & Dining", icon: Coffee, color: "#F43F5E", emoji: "🍕" },
+  { name: "Transport", icon: Car, color: "#6366F1", emoji: "🚗" },
+  { name: "Shopping", icon: ShoppingBag, color: "#10B981", emoji: "🛍️" },
+  { name: "Subscriptions", icon: CreditCard, color: "#F59E0B", emoji: "📱" },
+  { name: "Entertainment", icon: Film, color: "#EC4899", emoji: "🎬" },
+  { name: "Bills & Utilities", icon: Zap, color: "#8B5CF6", emoji: "💡" },
+  { name: "Health", icon: Heart, color: "#14B8A6", emoji: "💊" },
+  { name: "Travel", icon: Plane, color: "#0EA5E9", emoji: "✈️" },
+  { name: "Income", icon: ArrowUpRight, color: "#10B981", emoji: "💰" },
 ];
 
-// Skeleton
-const Skeleton = ({ className }) => (
-  <div className={`skeleton ${className}`} />
-);
+const CATEGORY_MAP = CATEGORIES.reduce((accumulator, category) => {
+  accumulator[category.name] = category;
+  return accumulator;
+}, {});
 
-// Transaction Row Component
+const TYPE_MAP = {
+  expense: "debit",
+  debit: "debit",
+  income: "credit",
+  credit: "credit",
+};
+
+const normalizeType = (value) => TYPE_MAP[String(value || "debit").toLowerCase()] || "debit";
+
+const getMerchantName = (transaction) =>
+  transaction?.merchant_name || transaction?.merchant || "Unknown merchant";
+
+const getAmount = (transaction) => Math.abs(Number(transaction?.amount) || 0);
+
+const parseDateFromParam = (value) => {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+};
+
+const parseNumberFromParam = (value) => {
+  if (value === null || value === undefined || value === "") return "";
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? String(parsed) : "";
+};
+
+const toDateParam = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const parseFiltersFromSearchParams = (searchParams) => {
+  const readArray = (key) => {
+    const value = searchParams.get(key);
+    return value
+      ? value
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean)
+      : [];
+  };
+
+  const type = searchParams.get("type");
+  const parsedType = type === "debit" || type === "credit" ? type : "all";
+
+  return {
+    search: searchParams.get("search") || "",
+    categories: readArray("categories"),
+    dateRange: {
+      from: parseDateFromParam(searchParams.get("from")),
+      to: parseDateFromParam(searchParams.get("to")),
+    },
+    amountRange: {
+      min: parseNumberFromParam(searchParams.get("min")),
+      max: parseNumberFromParam(searchParams.get("max")),
+    },
+    banks: readArray("banks"),
+    type: parsedType,
+  };
+};
+
+const createSearchParamsFromFilters = (filters) => {
+  const params = new URLSearchParams();
+
+  if (filters.search?.trim()) {
+    params.set("search", filters.search.trim());
+  }
+
+  if (filters.categories.length > 0) {
+    params.set("categories", filters.categories.join(","));
+  }
+
+  if (filters.banks.length > 0) {
+    params.set("banks", filters.banks.join(","));
+  }
+
+  if (filters.dateRange.from) {
+    params.set("from", toDateParam(filters.dateRange.from));
+  }
+
+  if (filters.dateRange.to) {
+    params.set("to", toDateParam(filters.dateRange.to));
+  }
+
+  if (filters.amountRange.min !== "") {
+    params.set("min", String(filters.amountRange.min));
+  }
+
+  if (filters.amountRange.max !== "") {
+    params.set("max", String(filters.amountRange.max));
+  }
+
+  if (filters.type !== "all") {
+    params.set("type", filters.type);
+  }
+
+  return params;
+};
+
+const Skeleton = ({ className }) => <div className={`skeleton ${className}`} />;
+
 const TransactionRow = ({ transaction, onEdit, onDelete }) => {
-  const category = CATEGORIES.find((c) => c.name === transaction.category);
+  const category = CATEGORY_MAP[transaction.category];
   const Icon = category?.icon || Receipt;
   const color = category?.color || "#78716C";
-  const isIncome = transaction.type === "income";
+  const isCredit = normalizeType(transaction.type) === "credit";
 
   const formatDate = (dateStr) => {
     const date = new Date(dateStr);
@@ -68,27 +167,23 @@ const TransactionRow = ({ transaction, onEdit, onDelete }) => {
 
     if (date.toDateString() === today.toDateString()) return "Today";
     if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return date.toLocaleDateString("en-IL", { month: "short", day: "numeric" });
   };
 
   return (
-    <div 
+    <div
       className="flex items-center gap-4 p-4 bg-white rounded-2xl border border-stone-100 hover:shadow-premium transition-all group animate-fade-in"
       data-testid={`transaction-row-${transaction.id}`}
     >
-      {/* Icon */}
-      <div 
+      <div
         className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
         style={{ backgroundColor: `${color}15` }}
       >
         <Icon className="w-5 h-5" style={{ color }} />
       </div>
 
-      {/* Details */}
       <div className="flex-1 min-w-0">
-        <p className="font-medium text-stone-900 truncate">
-          {transaction.merchant}
-        </p>
+        <p className="font-medium text-stone-900 truncate">{getMerchantName(transaction)}</p>
         <div className="flex items-center gap-2 text-sm text-stone-500">
           <span>{transaction.category}</span>
           <span>•</span>
@@ -96,16 +191,20 @@ const TransactionRow = ({ transaction, onEdit, onDelete }) => {
         </div>
       </div>
 
-      {/* Amount */}
       <div className="text-right flex-shrink-0">
-        <p className={`font-semibold text-lg tabular-nums ${
-          isIncome ? "text-emerald-600" : "text-stone-900"
-        }`}>
-          {isIncome ? "+" : "-"}${transaction.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        <p
+          className={`font-semibold text-lg tabular-nums ${
+            isCredit ? "text-emerald-600" : "text-stone-900"
+          }`}
+        >
+          {isCredit ? "+" : "-"}₪
+          {getAmount(transaction).toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
         </p>
       </div>
 
-      {/* Actions */}
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
         <button
           onClick={() => onEdit(transaction)}
@@ -128,12 +227,17 @@ const TransactionRow = ({ transaction, onEdit, onDelete }) => {
   );
 };
 
-// Edit Transaction Modal
 const EditModal = ({ transaction, open, onClose, onSave }) => {
-  const [amount, setAmount] = useState(transaction?.amount?.toString() || "");
-  const [merchant, setMerchant] = useState(transaction?.merchant || "");
-  const [category, setCategory] = useState(transaction?.category || "");
+  const [amount, setAmount] = useState("");
+  const [merchant, setMerchant] = useState("");
+  const [category, setCategory] = useState("");
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setAmount(transaction?.amount?.toString() || "");
+    setMerchant(getMerchantName(transaction));
+    setCategory(transaction?.category || "");
+  }, [transaction]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -142,6 +246,7 @@ const EditModal = ({ transaction, open, onClose, onSave }) => {
         ...transaction,
         amount: parseFloat(amount),
         merchant,
+        merchant_name: merchant,
         category,
       });
       onClose();
@@ -161,56 +266,56 @@ const EditModal = ({ transaction, open, onClose, onSave }) => {
         <DialogHeader>
           <DialogTitle className="font-heading text-xl">Edit Transaction</DialogTitle>
         </DialogHeader>
-        
+
         <div className="space-y-4 py-4">
           <div>
             <label className="block text-sm font-medium text-stone-600 mb-2">Amount</label>
             <Input
               type="number"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={(event) => setAmount(event.target.value)}
               className="h-12 rounded-xl"
               data-testid="edit-amount"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-stone-600 mb-2">Merchant</label>
             <Input
               value={merchant}
-              onChange={(e) => setMerchant(e.target.value)}
+              onChange={(event) => setMerchant(event.target.value)}
               className="h-12 rounded-xl"
               data-testid="edit-merchant"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-stone-600 mb-2">Category</label>
             <div className="flex flex-wrap gap-2">
-              {CATEGORIES.filter(c => c.name !== "Income").map((cat) => (
+              {CATEGORIES.filter((item) => item.name !== "Income").map((item) => (
                 <button
-                  key={cat.name}
-                  onClick={() => setCategory(cat.name)}
+                  key={item.name}
+                  onClick={() => setCategory(item.name)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                    category === cat.name
+                    category === item.name
                       ? "bg-stone-900 text-white"
                       : "bg-stone-100 text-stone-600 hover:bg-stone-200"
                   }`}
                 >
-                  <cat.icon className="w-3.5 h-3.5" />
-                  {cat.name}
+                  <item.icon className="w-3.5 h-3.5" />
+                  {item.name}
                 </button>
               ))}
             </div>
           </div>
         </div>
-        
+
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={onClose} className="rounded-xl">
             Cancel
           </Button>
-          <Button 
-            onClick={handleSave} 
+          <Button
+            onClick={handleSave}
             disabled={saving}
             className="rounded-xl bg-stone-900 hover:bg-stone-800"
             data-testid="save-edit-btn"
@@ -223,7 +328,6 @@ const EditModal = ({ transaction, open, onClose, onSave }) => {
   );
 };
 
-// Delete Confirmation Modal
 const DeleteModal = ({ transaction, open, onClose, onConfirm }) => {
   const [deleting, setDeleting] = useState(false);
 
@@ -251,16 +355,17 @@ const DeleteModal = ({ transaction, open, onClose, onConfirm }) => {
           </div>
           <DialogTitle className="font-heading text-xl mb-2">Delete Transaction?</DialogTitle>
           <p className="text-stone-500 text-sm">
-            This will permanently delete the ${transaction.amount} expense from {transaction.merchant}.
+            This will permanently delete the ₪{getAmount(transaction).toLocaleString()} expense from{" "}
+            {getMerchantName(transaction)}.
           </p>
         </div>
-        
+
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={onClose} className="flex-1 rounded-xl">
             Cancel
           </Button>
-          <Button 
-            onClick={handleDelete} 
+          <Button
+            onClick={handleDelete}
             disabled={deleting}
             className="flex-1 rounded-xl bg-rose-500 hover:bg-rose-600 text-white"
             data-testid="confirm-delete-btn"
@@ -273,81 +378,72 @@ const DeleteModal = ({ transaction, open, onClose, onConfirm }) => {
   );
 };
 
-// Filter Chip
-const FilterChip = ({ label, active, onClick, icon: Icon }) => (
-  <button
-    onClick={onClick}
-    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-      active
-        ? "bg-stone-900 text-white"
-        : "bg-white text-stone-600 border border-stone-200 hover:bg-stone-50"
-    }`}
-  >
-    {Icon && <Icon className="w-3.5 h-3.5" />}
-    {label}
-  </button>
-);
-
-// Main Transactions Page
 const Transactions = () => {
-  const { API, transactions, loading, refreshData } = useApi();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState(null);
-  const [dateFilter, setDateFilter] = useState("all"); // all, week, month
+  const { API, transactions = [], loading, refreshData } = useApi();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [deletingTransaction, setDeletingTransaction] = useState(null);
 
-  // Filter transactions
-  const filteredTransactions = useMemo(() => {
-    if (!transactions) return [];
-    
-    let filtered = [...transactions];
-    
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (t) =>
-          t.merchant.toLowerCase().includes(query) ||
-          t.category.toLowerCase().includes(query)
-      );
-    }
-    
-    // Category filter
-    if (selectedCategory) {
-      filtered = filtered.filter((t) => t.category === selectedCategory);
-    }
-    
-    // Date filter
-    const today = new Date();
-    if (dateFilter === "week") {
-      const weekAgo = new Date(today);
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      filtered = filtered.filter((t) => new Date(t.date) >= weekAgo);
-    } else if (dateFilter === "month") {
-      const monthAgo = new Date(today);
-      monthAgo.setMonth(monthAgo.getMonth() - 1);
-      filtered = filtered.filter((t) => new Date(t.date) >= monthAgo);
-    }
-    
-    // Sort by date (newest first)
-    filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
-    
-    return filtered;
-  }, [transactions, searchQuery, selectedCategory, dateFilter]);
+  const initialFilters = useMemo(
+    () => parseFiltersFromSearchParams(searchParams),
+    [searchParams]
+  );
 
-  // Group transactions by date
+  const {
+    filters,
+    setFilters,
+    clearFilters,
+    filtered,
+    totalCount,
+    totalAmount,
+    activeFilterCount,
+  } = useTransactionFilters(transactions, initialFilters);
+
+  useEffect(() => {
+    setFilters(initialFilters);
+  }, [initialFilters, setFilters]);
+
+  useEffect(() => {
+    const params = createSearchParamsFromFilters(filters);
+    if (params.toString() !== searchParams.toString()) {
+      setSearchParams(params, { replace: true });
+    }
+  }, [filters, searchParams, setSearchParams]);
+
+  const categories = useMemo(() => {
+    const unique = Array.from(
+      new Set(transactions.map((transaction) => transaction.category).filter(Boolean))
+    );
+
+    return unique.map((name) => ({
+      name,
+      emoji: CATEGORY_MAP[name]?.emoji || "🏷️",
+    }));
+  }, [transactions]);
+
+  const banks = useMemo(() => {
+    const unique = Array.from(
+      new Set(
+        transactions
+          .map((transaction) => transaction.bank_id)
+          .filter((bankId) => bankId !== null && bankId !== undefined && bankId !== "")
+      )
+    );
+
+    return unique.map((id) => ({ id: String(id), name: `Bank ${id}` }));
+  }, [transactions]);
+
   const groupedTransactions = useMemo(() => {
     const groups = {};
-    filteredTransactions.forEach((t) => {
-      const date = t.date;
-      if (!groups[date]) groups[date] = [];
-      groups[date].push(t);
+    filtered.forEach((transaction) => {
+      if (!groups[transaction.date]) {
+        groups[transaction.date] = [];
+      }
+      groups[transaction.date].push(transaction);
     });
     return groups;
-  }, [filteredTransactions]);
+  }, [filtered]);
 
-  // Handle edit
   const handleEdit = async (updatedTransaction) => {
     await axios.put(`${API}/transactions/${updatedTransaction.id}`, {
       date: updatedTransaction.date,
@@ -359,22 +455,20 @@ const Transactions = () => {
     refreshData();
   };
 
-  // Handle delete
   const handleDelete = async (transaction) => {
     await axios.delete(`${API}/transactions/${transaction.id}`);
     refreshData();
   };
 
-  // Calculate totals
   const totals = useMemo(() => {
-    const expenses = filteredTransactions
-      .filter((t) => t.type === "expense")
-      .reduce((sum, t) => sum + t.amount, 0);
-    const income = filteredTransactions
-      .filter((t) => t.type === "income")
-      .reduce((sum, t) => sum + t.amount, 0);
+    const expenses = filtered
+      .filter((transaction) => normalizeType(transaction.type) === "debit")
+      .reduce((sum, transaction) => sum + getAmount(transaction), 0);
+    const income = filtered
+      .filter((transaction) => normalizeType(transaction.type) === "credit")
+      .reduce((sum, transaction) => sum + getAmount(transaction), 0);
     return { expenses, income, net: income - expenses };
-  }, [filteredTransactions]);
+  }, [filtered]);
 
   const formatDateHeader = (dateStr) => {
     const date = new Date(dateStr);
@@ -384,7 +478,11 @@ const Transactions = () => {
 
     if (date.toDateString() === today.toDateString()) return "Today";
     if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
-    return date.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+    return date.toLocaleDateString("en-IL", {
+      weekday: "long",
+      month: "short",
+      day: "numeric",
+    });
   };
 
   if (loading) {
@@ -392,8 +490,8 @@ const Transactions = () => {
       <div data-testid="transactions-loading">
         <Skeleton className="h-10 w-64 mb-8" />
         <div className="space-y-4">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <Skeleton key={i} className="h-20 w-full rounded-2xl" />
+          {[1, 2, 3, 4, 5].map((item) => (
+            <Skeleton key={item} className="h-20 w-full rounded-2xl" />
           ))}
         </div>
       </div>
@@ -402,85 +500,41 @@ const Transactions = () => {
 
   return (
     <div data-testid="transactions-page">
-      {/* Page Header */}
       <div className="mb-8 animate-fade-in">
         <h1 className="font-heading text-3xl lg:text-4xl font-bold text-stone-900 mb-2">
           Transaction History
         </h1>
-        <p className="text-stone-500">
-          View, edit, and manage all your transactions
-        </p>
+        <p className="text-stone-500">View, edit, and manage all your transactions</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
-        {/* Main Content */}
         <div className="lg:col-span-8 space-y-6">
-          {/* Search & Filters */}
           <div className="space-y-4 animate-fade-in-up">
-            {/* Search */}
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" />
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search transactions..."
-                className="h-12 pl-12 rounded-xl border-stone-200 bg-white"
-                data-testid="search-input"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-4 top-1/2 -translate-y-1/2"
-                >
-                  <X className="w-4 h-4 text-stone-400" />
-                </button>
-              )}
-            </div>
+            <TransactionFilters
+              filters={filters}
+              setFilters={setFilters}
+              clearFilters={clearFilters}
+              categories={categories}
+              banks={banks}
+              activeFilterCount={activeFilterCount}
+            />
 
-            {/* Filter Chips */}
-            <div className="flex flex-wrap gap-2">
-              <FilterChip
-                label="All Time"
-                active={dateFilter === "all"}
-                onClick={() => setDateFilter("all")}
-                icon={Calendar}
-              />
-              <FilterChip
-                label="This Week"
-                active={dateFilter === "week"}
-                onClick={() => setDateFilter("week")}
-              />
-              <FilterChip
-                label="This Month"
-                active={dateFilter === "month"}
-                onClick={() => setDateFilter("month")}
-              />
-              <div className="w-px h-6 bg-stone-200 mx-1" />
-              {CATEGORIES.slice(0, 4).map((cat) => (
-                <FilterChip
-                  key={cat.name}
-                  label={cat.name}
-                  active={selectedCategory === cat.name}
-                  onClick={() => setSelectedCategory(selectedCategory === cat.name ? null : cat.name)}
-                  icon={cat.icon}
-                />
-              ))}
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-stone-600 px-1">
+              <span>{totalCount} results</span>
+              <span className="font-medium">Filtered expenses: ₪{totalAmount.toLocaleString()}</span>
             </div>
           </div>
 
-          {/* Transaction List */}
           <div className="space-y-6">
             {Object.keys(groupedTransactions).length === 0 ? (
               <div className="text-center py-16 animate-fade-in">
                 <Receipt className="w-16 h-16 text-stone-300 mx-auto mb-4" />
                 <h3 className="font-heading text-lg font-semibold text-stone-900 mb-2">
-                  No transactions found
+                  No transactions match your filters
                 </h3>
-                <p className="text-stone-500 text-sm">
-                  {searchQuery || selectedCategory
-                    ? "Try adjusting your filters"
-                    : "Add your first expense using the + button"}
-                </p>
+                <Button variant="outline" className="rounded-xl" onClick={clearFilters}>
+                  Clear filters
+                </Button>
               </div>
             ) : (
               Object.entries(groupedTransactions).map(([date, dayTransactions]) => (
@@ -504,15 +558,11 @@ const Transactions = () => {
           </div>
         </div>
 
-        {/* Sidebar */}
         <div className="lg:col-span-4 space-y-6">
-          {/* Summary Card */}
           <Card className="card-premium rounded-3xl animate-fade-in-up" data-testid="summary-card">
             <CardContent className="p-6">
-              <h3 className="font-heading font-semibold text-stone-900 mb-4">
-                Summary
-              </h3>
-              
+              <h3 className="font-heading font-semibold text-stone-900 mb-4">Summary</h3>
+
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -522,10 +572,10 @@ const Transactions = () => {
                     <span className="text-sm text-stone-600">Income</span>
                   </div>
                   <span className="font-semibold text-emerald-600 tabular-nums">
-                    +${totals.income.toLocaleString()}
+                    +₪{totals.income.toLocaleString()}
                   </span>
                 </div>
-                
+
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-lg bg-rose-100 flex items-center justify-center">
@@ -534,17 +584,19 @@ const Transactions = () => {
                     <span className="text-sm text-stone-600">Expenses</span>
                   </div>
                   <span className="font-semibold text-rose-600 tabular-nums">
-                    -${totals.expenses.toLocaleString()}
+                    -₪{totals.expenses.toLocaleString()}
                   </span>
                 </div>
-                
+
                 <div className="pt-4 border-t border-stone-100">
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-stone-900">Net</span>
-                    <span className={`font-bold text-lg tabular-nums ${
-                      totals.net >= 0 ? "text-emerald-600" : "text-rose-600"
-                    }`}>
-                      {totals.net >= 0 ? "+" : ""}{totals.net.toLocaleString()}
+                    <span
+                      className={`font-bold text-lg tabular-nums ${
+                        totals.net >= 0 ? "text-emerald-600" : "text-rose-600"
+                      }`}
+                    >
+                      {totals.net >= 0 ? "+" : "-"}₪{Math.abs(totals.net).toLocaleString()}
                     </span>
                   </div>
                 </div>
@@ -552,27 +604,30 @@ const Transactions = () => {
             </CardContent>
           </Card>
 
-          {/* Weekly Budget Widget */}
           <div className="animate-fade-in-up delay-100">
             <WeeklyBudgetWidget transactions={transactions} />
           </div>
 
-          {/* Quick Stats */}
           <Card className="card-premium rounded-3xl animate-fade-in-up delay-150">
             <CardContent className="p-6">
-              <h3 className="font-heading font-semibold text-stone-900 mb-4">
-                Quick Stats
-              </h3>
+              <h3 className="font-heading font-semibold text-stone-900 mb-4">Quick Stats</h3>
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-stone-500">Total transactions</span>
-                  <span className="font-semibold text-stone-900">{filteredTransactions.length}</span>
+                  <span className="font-semibold text-stone-900">{totalCount}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-stone-500">Avg. expense</span>
                   <span className="font-semibold text-stone-900 tabular-nums">
-                    ${filteredTransactions.filter(t => t.type === "expense").length > 0
-                      ? (totals.expenses / filteredTransactions.filter(t => t.type === "expense").length).toFixed(2)
+                    ₪
+                    {filtered.filter((transaction) => normalizeType(transaction.type) === "debit")
+                      .length > 0
+                      ? (
+                          totals.expenses /
+                          filtered.filter(
+                            (transaction) => normalizeType(transaction.type) === "debit"
+                          ).length
+                        ).toFixed(2)
                       : "0.00"}
                   </span>
                 </div>
@@ -582,7 +637,6 @@ const Transactions = () => {
         </div>
       </div>
 
-      {/* Edit Modal */}
       <EditModal
         transaction={editingTransaction}
         open={!!editingTransaction}
@@ -590,7 +644,6 @@ const Transactions = () => {
         onSave={handleEdit}
       />
 
-      {/* Delete Modal */}
       <DeleteModal
         transaction={deletingTransaction}
         open={!!deletingTransaction}
