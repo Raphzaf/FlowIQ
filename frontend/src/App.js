@@ -41,6 +41,7 @@ import OnboardingPage from "./pages/OnboardingPage";
 import { QuickEntryFAB, QuickEntryDrawer } from "./pages/QuickEntry";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import CookieConsentBanner from "./components/CookieConsentBanner";
+import Budget from "./pages/Budget";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
 const API = `${BACKEND_URL}/api`;
@@ -711,6 +712,7 @@ function App() {
                   <Route path="/upload" element={<UploadPage />} />
                   <Route path="/banks" element={<IsraeliBank />} />
                   <Route path="/banks/woob" element={<WoobBanks />} />
+                  <Route path="/budgets" element={<Budget />} />
                 </>
               ) : loading ? (
                 // Wait for profile to load before redirecting (prevents redirect loop)
