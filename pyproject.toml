@@ -30,3 +30,8 @@ dependencies = [
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# This project uses Vercel's function entrypoints directly and does not publish a Python package.
+# Prevent setuptools from auto-discovering top-level workspace folders as packages.
+packages = []
