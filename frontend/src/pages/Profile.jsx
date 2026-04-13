@@ -26,7 +26,7 @@ const TIMEZONES = [
 ];
 
 const Profile = () => {
-  const { API, userId, userProfile, refreshData } = useApi();
+  const { API, userId, userProfile, refreshData, isDemoMode } = useApi();
   const [displayName, setDisplayName] = useState("");
   const [currency, setCurrency] = useState("USD");
   const [monthlyBudget, setMonthlyBudget] = useState("");
@@ -403,9 +403,14 @@ const Profile = () => {
               </div>
 
               <div className="pt-2">
+                {isDemoMode && (
+                  <p className="text-sm text-amber-600 bg-amber-50 rounded-xl px-3 py-2 mb-3">
+                    Profile editing is disabled in demo mode.
+                  </p>
+                )}
                 <Button
                   type="submit"
-                  disabled={saving}
+                  disabled={saving || isDemoMode}
                   className="rounded-xl bg-stone-900 hover:bg-stone-800 h-11 px-5"
                   data-testid="profile-save-btn"
                 >

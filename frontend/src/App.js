@@ -15,8 +15,17 @@ import {
   User,
   LogOut,
   ShieldCheck,
-  Building2
+  Building2,
+  PlayCircle
 } from "lucide-react";
+import { useDemoMode } from "./hooks/useDemoMode";
+import {
+  demoTransactions,
+  demoDashboardData,
+  demoCashflow,
+  demoInsights,
+  demoUserProfile,
+} from "./data/demoData";
 
 // Pages
 import Dashboard from "./pages/Dashboard";
@@ -40,8 +49,31 @@ export const ApiContext = createContext();
 
 export const useApi = () => useContext(ApiContext);
 
+// Demo banner shown at top of app when in demo mode
+const DemoBanner = ({ onExit }) => {
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed) return null;
+  return (
+    <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center justify-between gap-4" data-testid="demo-banner">
+      <p className="text-sm text-amber-800 font-medium">
+        🎭 Demo mode — data is fictional and read-only.{" "}
+        <button onClick={onExit} className="underline hover:no-underline ml-1">
+          Exit demo
+        </button>
+      </p>
+      <button
+        onClick={() => setDismissed(true)}
+        className="text-amber-600 hover:text-amber-900 flex-shrink-0"
+        aria-label="Dismiss demo banner"
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
+};
+
 // Premium Navigation component
-const Navigation = ({ onSignOut }) => {
+const Navigation = ({ onSignOut, isDemoMode, onExitDemo }) => {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -113,12 +145,12 @@ const Navigation = ({ onSignOut }) => {
             })}
             </nav>
             <button
-              onClick={onSignOut}
+              onClick={isDemoMode ? onExitDemo : onSignOut}
               className="inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium text-stone-600 hover:text-stone-900 hover:bg-stone-100 transition-all"
               data-testid="signout-btn"
             >
               <LogOut className="w-4 h-4" />
-              Logout
+              {isDemoMode ? "Exit Demo" : "Logout"}
             </button>
           </div>
 
@@ -166,13 +198,17 @@ const Navigation = ({ onSignOut }) => {
               <button
                 onClick={() => {
                   setMobileMenuOpen(false);
-                  onSignOut();
+                  if (isDemoMode) {
+                    onExitDemo();
+                  } else {
+                    onSignOut();
+                  }
                 }}
                 className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-stone-600 hover:bg-stone-100 transition-all"
                 data-testid="mobile-signout-btn"
               >
                 <LogOut className="w-5 h-5" />
-                Logout
+                {isDemoMode ? "Exit Demo" : "Logout"}
               </button>
             </div>
           </nav>
@@ -260,7 +296,7 @@ const ResetPasswordScreen = ({ onDone }) => {
   );
 };
 
-const AuthScreen = () => {
+const AuthScreen = ({ onDemoEnter }) => {
   const [mode, setMode] = useState("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -422,6 +458,28 @@ const AuthScreen = () => {
                 {mode === "signin" ? "No account? Create one" : "Already have an account? Sign in"}
               </button>
             )}
+
+            {onDemoEnter && (
+              <>
+                <div className="relative my-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-stone-200" />
+                  </div>
+                  <div className="relative flex justify-center text-xs">
+                    <span className="bg-white px-2 text-stone-400">or</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={onDemoEnter}
+                  data-testid="auth-demo-btn"
+                  className="w-full h-11 rounded-xl border border-stone-300 text-stone-700 font-medium hover:bg-stone-50 flex items-center justify-center gap-2 transition-colors"
+                >
+                  <PlayCircle className="w-4 h-4" />
+                  Try Demo — no account needed
+                </button>
+              </>
+            )}
           </>
         )}
       </div>
@@ -430,6 +488,7 @@ const AuthScreen = () => {
 };
 
 function App() {
+  const { isDemoMode, enterDemoMode, exitDemoMode } = useDemoMode();
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [userId, setUserId] = useState(null);
@@ -559,16 +618,18 @@ function App() {
 
   const apiValue = {
     API,
-    userId,
-    userProfile,
-    dashboardData,
-    insights,
-    advancedInsights,
-    cashflow,
-    transactions,
-    loading,
-    refreshData: fetchData,
+    userId: isDemoMode ? "demo-user" : userId,
+    userProfile: isDemoMode ? demoUserProfile : userProfile,
+    dashboardData: isDemoMode ? demoDashboardData : dashboardData,
+    insights: isDemoMode ? demoInsights : insights,
+    advancedInsights: isDemoMode ? null : advancedInsights,
+    cashflow: isDemoMode ? demoCashflow : cashflow,
+    transactions: isDemoMode ? demoTransactions : transactions,
+    loading: isDemoMode ? false : loading,
+    refreshData: isDemoMode ? () => {} : fetchData,
     signOut,
+    isDemoMode,
+    exitDemoMode,
   };
 
   // Determine onboarding state:
@@ -578,9 +639,9 @@ function App() {
   // - "completed" → allow access to the full app
   const onboardingStatus = userProfile?.onboarding_status;
   const onboardingCompleted =
-    userProfile !== null && (!onboardingStatus || onboardingStatus === "completed");
+    isDemoMode || (userProfile !== null && (!onboardingStatus || onboardingStatus === "completed"));
 
-  if (!hasSupabaseEnv) {
+  if (!hasSupabaseEnv && !isDemoMode) {
     return (
       <div className="min-h-screen bg-[#FAF9F7] p-6 text-stone-800">
         <h1 className="font-heading text-2xl font-bold mb-2">Supabase env missing</h1>
@@ -589,7 +650,7 @@ function App() {
     );
   }
 
-  if (authLoading) {
+  if (authLoading && !isDemoMode) {
     return (
       <div className="min-h-screen bg-[#FAF9F7] p-6 flex items-center justify-center text-stone-600">
         Loading authentication...
@@ -606,10 +667,10 @@ function App() {
     );
   }
 
-  if (!session) {
+  if (!session && !isDemoMode) {
     return (
       <>
-        <AuthScreen />
+        <AuthScreen onDemoEnter={enterDemoMode} />
         <Toaster position="bottom-right" />
       </>
     );
@@ -619,8 +680,18 @@ function App() {
     <ApiContext.Provider value={apiValue}>
       <div className="min-h-screen bg-[#FAF9F7]">
         <BrowserRouter>
+          {/* Demo banner — shown when in demo mode */}
+          {isDemoMode && (
+            <DemoBanner onExit={() => { exitDemoMode(); window.location.reload(); }} />
+          )}
           {/* Show nav only when onboarding is done */}
-          {onboardingCompleted && <Navigation onSignOut={signOut} />}
+          {onboardingCompleted && (
+            <Navigation
+              onSignOut={signOut}
+              isDemoMode={isDemoMode}
+              onExitDemo={() => { exitDemoMode(); window.location.reload(); }}
+            />
+          )}
           <main className={onboardingCompleted ? "max-w-7xl mx-auto px-3 sm:px-5 lg:px-8 py-6 lg:py-10" : ""}>
             <Routes>
               {/* Onboarding route — always accessible */}
