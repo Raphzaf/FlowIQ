@@ -82,7 +82,8 @@ const CategoryBadge = ({ transactionId, category, userCategoryOverride, API, onC
       setCurrentCategory(prevCategory);
       setIsOverride(prevOverride);
       if (onCategoryChange) onCategoryChange(prevCategory);
-      toast.error("Failed to update category");
+      const detail = err?.response?.data?.detail;
+      toast.error(detail ? `Failed to update category: ${detail}` : "Failed to update category");
     } finally {
       setSaving(false);
     }
@@ -112,7 +113,7 @@ const CategoryBadge = ({ transactionId, category, userCategoryOverride, API, onC
       </PopoverTrigger>
       <PopoverContent className="w-56 p-0 rounded-2xl shadow-lg border border-stone-200" align="start" sideOffset={4}>
         <Command>
-          <CommandInput placeholder="Search category…" className="h-9 text-sm" autoFocus />
+          <CommandInput placeholder="Search category…" className="h-9 text-sm" />
           <CommandList>
             <CommandEmpty className="py-3 text-center text-sm text-stone-400">No category found</CommandEmpty>
             <CommandGroup>
